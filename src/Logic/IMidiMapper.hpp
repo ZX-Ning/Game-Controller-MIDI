@@ -6,7 +6,7 @@
 
 #include "Common/MidiTypes.hpp"
 
-namespace DISTRHO {
+namespace GCMidi {
 
 // Interface for translating controller events into MIDI
 class IMidiMapper {
@@ -20,6 +20,6 @@ public:
     virtual void onButton(uint8_t button, bool pressed, bool shiftState, boost::lockfree::queue<RawMidi>& outQueue) = 0;
 };
 
-}  // namespace DISTRHO
+}  // namespace GCMidi
 
 #endif  // IMIDI_MAPPER_HPP_INCLUDED

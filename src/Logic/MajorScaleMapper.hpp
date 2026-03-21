@@ -5,7 +5,7 @@
 
 #include "IMidiMapper.hpp"
 
-namespace DISTRHO {
+namespace GCMidi {
 
 class MajorScaleMapper : public IMidiMapper {
 public:
@@ -25,6 +25,6 @@ private:
     uint8_t fActiveNotes[SDL_CONTROLLER_BUTTON_MAX];
 };
 
-}  // namespace DISTRHO
+}  // namespace GCMidi
 
 #endif  // MAJOR_SCALE_MAPPER_HPP_INCLUDED

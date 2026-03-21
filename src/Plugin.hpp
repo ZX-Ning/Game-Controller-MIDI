@@ -15,7 +15,7 @@
 
 START_NAMESPACE_DISTRHO
 
-class GameControllerMIDIPlugin : public Plugin, public IControllerEventHandler {
+class GameControllerMIDIPlugin : public Plugin, public GCMidi::IControllerEventHandler {
 public:
     enum Parameters {
         kParamCount = 0
@@ -65,7 +65,7 @@ public:
 
     // For UI feedback
     static const uint32_t kMidiHistorySize = 128;
-    std::vector<RawMidi> fMidiHistory;
+    std::vector<GCMidi::RawMidi> fMidiHistory;
     std::atomic<uint32_t> fMidiHistoryIndex;
 
     char fControllerName[256];
@@ -74,10 +74,10 @@ public:
 
 private:
     // Thread-safe MIDI event queue for internal communication
-    boost::lockfree::queue<RawMidi> fMidiQueue;
+    boost::lockfree::queue<GCMidi::RawMidi> fMidiQueue;
 
     // Active MIDI Mapping Strategy
-    std::unique_ptr<IMidiMapper> fMapper;
+    std::unique_ptr<GCMidi::IMidiMapper> fMapper;
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GameControllerMIDIPlugin)
 };

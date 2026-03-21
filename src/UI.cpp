@@ -97,7 +97,6 @@ protected:
 
                 if (msg.size > 0) {
                     uint8_t status = msg.data[0] & 0xF0;
-                    // uint8_t channel = (msg.data[0] & 0x0F) + 1;
 
                     if (status == 0x90 && msg.size >= 3 && msg.data[2] > 0) {
                         int note = msg.data[1];

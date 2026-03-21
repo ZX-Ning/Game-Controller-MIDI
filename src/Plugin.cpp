@@ -17,13 +17,13 @@ GameControllerMIDIPlugin::GameControllerMIDIPlugin()
 
     fMidiHistory.resize(kMidiHistorySize);
 
-    fMapper = std::make_unique<MajorScaleMapper>();
+    fMapper = std::make_unique<GCMidi::MajorScaleMapper>();
 
-    SdlManager::getInstance().setEventHandler(this);
+    GCMidi::SdlManager::getInstance().setEventHandler(this);
 }
 
 GameControllerMIDIPlugin::~GameControllerMIDIPlugin() {
-    SdlManager::getInstance().setEventHandler(nullptr);
+    GCMidi::SdlManager::getInstance().setEventHandler(nullptr);
 }
 
 void GameControllerMIDIPlugin::onControllerConnected(const char* name) {
@@ -66,7 +66,7 @@ void GameControllerMIDIPlugin::run(const float**, float**, uint32_t, const MidiE
     }
 
     // Drain our internal queue
-    RawMidi rawEv;
+    GCMidi::RawMidi rawEv;
     while (fMidiQueue.pop(rawEv)) {
         MidiEvent ev;
         ev.frame = 0;

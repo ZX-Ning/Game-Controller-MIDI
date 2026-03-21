@@ -3,9 +3,7 @@
 
 #include <cstdint>
 
-#include "DistrhoPlugin.hpp"
-
-START_NAMESPACE_DISTRHO
+namespace GCMidi {
 
 struct RawMidi {
     uint8_t data[4];
@@ -13,6 +11,6 @@ struct RawMidi {
     uint32_t frame;
 };
 
-END_NAMESPACE_DISTRHO
+}  // namespace GCMidi
 
 #endif  // MIDI_TYPES_HPP_INCLUDED

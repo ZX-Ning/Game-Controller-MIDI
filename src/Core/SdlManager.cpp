@@ -4,7 +4,7 @@
 
 #include "DistrhoUtils.hpp"
 
-namespace DISTRHO {
+namespace GCMidi {
 
 SdlManager& SdlManager::getInstance() {
     static SdlManager instance;
@@ -54,7 +54,8 @@ void SdlManager::setEventHandler(IControllerEventHandler* handler) {
 void SdlManager::init() {
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
     if (SDL_Init(SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK) < 0) {
-        d_stderr2("SDL_Init failed: %s", SDL_GetError());
+        // Fallback to stderr if DistrhoUtils is not available or has different namespace
+        fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return;
     }
     fRunning = true;
@@ -112,7 +113,7 @@ void SdlManager::loop() {
                 case SDL_CONTROLLERDEVICEREMOVED:
                     if (fController) {
                         SDL_JoystickID instanceId = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(fController));
-                        if (instanceId == event.cdevice.which) {
+                        if (instanceId == (SDL_JoystickID)event.cdevice.which) {
                             SDL_GameControllerClose(fController);
                             fController = nullptr;
                             if (fHandler) {
@@ -138,4 +139,4 @@ void SdlManager::loop() {
     }
 }
 
-}  // namespace DISTRHO
+}  // namespace GCMidi

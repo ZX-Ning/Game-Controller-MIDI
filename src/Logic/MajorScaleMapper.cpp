@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-namespace DISTRHO {
+namespace GCMidi {
 
 MajorScaleMapper::MajorScaleMapper() {
     std::memset(fActiveNotes, 0, sizeof(fActiveNotes));
@@ -53,4 +53,4 @@ void MajorScaleMapper::pushMidiEvent(boost::lockfree::queue<RawMidi>& queue, uin
     queue.push(ev);
 }
 
-}  // namespace DISTRHO
+}  // namespace GCMidi

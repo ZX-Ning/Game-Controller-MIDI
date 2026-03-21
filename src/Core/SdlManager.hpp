@@ -9,7 +9,7 @@
 
 #include "IControllerEventHandler.hpp"
 
-namespace DISTRHO {
+namespace GCMidi {
 
 // Global SDL Manager to handle lifecycle and event polling
 class SdlManager {
@@ -35,6 +35,6 @@ private:
     IControllerEventHandler* fHandler;
 };
 
-}  // namespace DISTRHO
+}  // namespace GCMidi
 
 #endif  // SDL_MANAGER_HPP_INCLUDED

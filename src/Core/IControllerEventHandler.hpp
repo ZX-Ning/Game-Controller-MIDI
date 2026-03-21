@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-namespace DISTRHO {
+namespace GCMidi {
 
 class IControllerEventHandler {
 public:
@@ -15,6 +15,6 @@ public:
     virtual void onControllerButton(uint8_t button, bool pressed, bool shiftState) = 0;
 };
 
-}  // namespace DISTRHO
+}  // namespace GCMidi
 
 #endif  // ICONTROLLER_EVENT_HANDLER_HPP_INCLUDED
