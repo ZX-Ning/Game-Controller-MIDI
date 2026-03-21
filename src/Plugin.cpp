@@ -14,116 +14,51 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "DistrhoPlugin.hpp"
+#include "Plugin.hpp"
 
 START_NAMESPACE_DISTRHO
 
-class ImGuiMinimalPlugin : public Plugin {
-public:
-    enum Parameters {
-        kParamGain = 0,
-        kParamCount
-    };
+ImGuiMinimalPlugin::ImGuiMinimalPlugin()
+    : Plugin(kParamCount, 0, 1),  // parameters, programs, states
+      fMidiHistoryIndex(0) {
+    fTestState = "hello";
+    fMidiHistory.resize(kMidiHistorySize);
+}
 
-    ImGuiMinimalPlugin()
-        : Plugin(kParamCount, 0, 0),  // parameters, programs, states
-          fGain(1.0f) {
+void ImGuiMinimalPlugin::initState(uint32_t index, State& state) {
+    if (index != 0) {
+        return;
     }
 
-protected:
-    /* -------------------------------------------------------------------------------------------------------
-     * Information */
+    state.hints = kStateIsHostReadable | kStateIsHostWritable;
+    state.key = "test-state";
+    state.defaultValue = "hello";
+}
 
-    const char* getLabel() const override {
-        return "ImGuiMinimal";
+String ImGuiMinimalPlugin::getState(const char* key) const {
+    if (std::strcmp(key, "test-state") == 0) {
+        return fTestState;
     }
 
-    const char* getDescription() const override {
-        return "Minimal DPF plugin with ImGui UI";
+    return Plugin::getState(key);
+}
+
+void ImGuiMinimalPlugin::setState(const char* key, const char* value) {
+    if (std::strcmp(key, "test-state") == 0) {
+        fTestState = value;
     }
+}
 
-    const char* getMaker() const override {
-        return "DISTRHO";
-    }
-
-    const char* getHomePage() const override {
-        return "https://github.com/DISTRHO/DPF";
-    }
-
-    const char* getLicense() const override {
-        return "ISC";
-    }
-
-    uint32_t getVersion() const override {
-        return d_version(1, 0, 0);
-    }
-
-    int64_t getUniqueId() const override {
-        return d_cconst('d', 'i', 'm', 'p');
-    }
-
-    /* -------------------------------------------------------------------------------------------------------
-     * Init */
-
-    void initParameter(uint32_t index, Parameter& parameter) override {
-        if (index != kParamGain) {
-            return;
+void ImGuiMinimalPlugin::run(const float**, float**, uint32_t, const MidiEvent* midiEvents, uint32_t midiEventCount) {
+    for (uint32_t i = 0; i < midiEventCount; ++i) {
+        if (midiEvents[i].size <= 4) {
+            fMidiHistoryIndex = (fMidiHistoryIndex + 1) % kMidiHistorySize;
+            fMidiHistory[fMidiHistoryIndex].size = midiEvents[i].size;
+            std::memcpy(fMidiHistory[fMidiHistoryIndex].data, midiEvents[i].data, midiEvents[i].size);
         }
-
-        parameter.hints = kParameterIsAutomable;
-        parameter.name = "Gain";
-        parameter.symbol = "gain";
-        parameter.ranges.def = 1.0f;
-        parameter.ranges.min = 0.0f;
-        parameter.ranges.max = 2.0f;
+        writeMidiEvent(midiEvents[i]);
     }
-
-    /* -------------------------------------------------------------------------------------------------------
-     * Internal data */
-
-    float getParameterValue(uint32_t index) const override {
-        if (index != kParamGain) {
-            return 0.0f;
-        }
-
-        return fGain;
-    }
-
-    void setParameterValue(uint32_t index, float value) override {
-        if (index != kParamGain) {
-            return;
-        }
-
-        fGain = value;
-    }
-
-    /* -------------------------------------------------------------------------------------------------------
-     * Process */
-
-    void activate() override {}
-
-    void run(const float** inputs, float** outputs, uint32_t frames) override {
-        const float* const inL = inputs[0];
-        const float* const inR = inputs[1];
-        float* const outL = outputs[0];
-        float* const outR = outputs[1];
-
-        for (uint32_t i = 0; i < frames; ++i) {
-            outL[i] = inL[i] * fGain;
-            outR[i] = inR[i] * fGain;
-        }
-    }
-
-    /* -------------------------------------------------------------------------------------------------------
-     * Callbacks (optional) */
-
-    // void sampleRateChanged(double newSampleRate) override {}
-
-private:
-    float fGain;
-
-    DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ImGuiMinimalPlugin)
-};
+}
 
 Plugin* createPlugin() {
     return new ImGuiMinimalPlugin();

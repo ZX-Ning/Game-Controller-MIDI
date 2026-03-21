@@ -4,7 +4,7 @@ This document provides a technical overview of the `dpf_imgui` project, designed
 
 ## Project Overview
 
-This project is a minimal audio plugin template built using the **DISTRHO Plugin Framework (DPF)** and **Dear ImGui**. It demonstrates how to integrate a modern, immediate-mode GUI into a cross-platform audio plugin.
+This project is a minimal audio plugin template built using the **DISTRHO Plugin Framework (DPF)** and **Dear ImGui**. It demonstrates how to integrate a modern, immediate-mode GUI into a cross-platform audio plugin, including parameter automation and state persistence.
 
 ## Directory Structure
 
@@ -13,8 +13,8 @@ This project is a minimal audio plugin template built using the **DISTRHO Plugin
 ├── CMakeLists.txt              # Main build configuration
 ├── AGENTS.MD                   # This guide
 ├── src/                        # Plugin source code
-│   ├── DistrhoPluginInfo.h     # Metadata (Name, URI, I/O count, etc.)
-│   ├── Plugin.cpp              # Audio processing logic (DSP)
+│   ├── DistrhoPluginInfo.h     # Metadata (Name, URI, I/O count, Custom UI defines)
+│   ├── Plugin.cpp              # Audio processing logic (DSP) and State management
 │   └── UI.cpp                  # Graphical User Interface logic (ImGui)
 └── third_party/                # Dependencies (Git Submodules)
     ├── DPF/                    # Core DISTRHO Plugin Framework
@@ -24,54 +24,62 @@ This project is a minimal audio plugin template built using the **DISTRHO Plugin
 ## Key Components
 
 ### 1. Metadata (`src/DistrhoPluginInfo.h`)
+
 Defines the plugin's identity and capabilities.
+
 - `DISTRHO_PLUGIN_NAME`: Human-readable name.
 - `DISTRHO_PLUGIN_URI`: Unique identifier for the plugin.
-- `DISTRHO_PLUGIN_HAS_UI`: Set to `1` for ImGui support.
-- `DISTRHO_UI_USE_OPENGL`: Set to `1` as ImGui requires an OpenGL backend in this setup.
+- `DISTRHO_PLUGIN_HAS_UI`: Set to `1`.
+- `DISTRHO_PLUGIN_WANT_STATE`: Set to `1` to enable custom state keys.
+- `DISTRHO_PLUGIN_WANT_FULL_STATE`: Set to `1` to enable `getState()` serialization.
+- `DISTRHO_UI_USE_CUSTOM`: Set to `1` to use DPF-Widgets integration.
+- `DISTRHO_UI_CUSTOM_INCLUDE_PATH`: Set to `"DearImGui.hpp"`.
+- `DISTRHO_UI_CUSTOM_WIDGET_TYPE`: Set to `DGL_NAMESPACE::ImGuiTopLevelWidget`.
 
-### 2. DSP Logic (`src/Plugin.cpp`)
+### 2. DSP Logic and State (`src/Plugin.cpp`)
+
 Inherits from `DISTRHO::Plugin`.
+
 - `initParameter()`: Define parameters (ranges, defaults, symbols).
-- `run()`: The audio callback. This is where the signal processing happens.
-- `setParameterValue()` / `getParameterValue()`: Syncs internal state with the host/UI.
+- `initState()`: Define state keys. **CRITICAL**: Must set `state.hints = kStateIsHostReadable | kStateIsHostWritable` for persistence.
+- `run()`: The audio callback for signal processing.
+- `getState()` / `setState()`: Handle serialization/deserialization of non-parameter data (e.g., strings).
+- `setParameterValue()` / `getParameterValue()`: Syncs parameters with the host.
 
 ### 3. UI Logic (`src/UI.cpp`)
-Inherits from `DISTRHO::UI` and `DGL_NAMESPACE::ImGuiTopLevelWidget`.
-- **Constructor**: Sets initial size and geometry constraints.
-- `parameterChanged()`: Callback from the DSP side (e.g., automation).
-- `onImGuiDisplay()`: **CRITICAL.** This is the immediate-mode draw loop. Use `ImGui::*` calls here.
-- `setParameterValue()`: Call this to send data from UI back to DSP.
+
+Inherits from `DISTRHO::UI`.
+
+- **Inheritance**: Due to `DISTRHO_UI_USE_CUSTOM`, the `UI` class already inherits from `ImGuiTopLevelWidget`.
+- `parameterChanged()`: Callback for parameter updates.
+- `stateChanged()`: Callback for state updates from the host or DSP.
+- `onImGuiDisplay()`: The immediate-mode draw loop. Use `ImGui::*` calls.
+- **State Updates**: Use `setState("key", value)` to notify the host of changes.
+- **UX Tip**: Use `ImGui::IsItemDeactivatedAfterEdit()` to commit state changes on Enter or Focus loss.
 
 ### 4. Build System (`CMakeLists.txt`)
+
 Uses DPF's CMake macros (`dpf_add_plugin`).
-- It compiles `third_party/DPF-Widgets/opengl/DearImGui.cpp` into the UI target.
-- Important: It maps include paths for `src` and `DPF-Widgets/opengl` to ensure headers are found by all sub-targets.
+
+- Links `third_party/DPF-Widgets/opengl/DearImGui.cpp`.
+- Configures include paths for `src` and `third_party/DPF-Widgets/opengl`.
 
 ## Extension Guide for Agents
 
 ### Adding a New Parameter
-1.  **Info**: Update `kParamCount` in `Plugin.cpp` (or an enum).
-2.  **Plugin**: Initialize it in `initParameter()`.
-3.  **Plugin**: Add a member variable to store the value and handle it in `run()`.
-4.  **UI**: Add a corresponding `ImGui` widget in `onImGuiDisplay()` (e.g., `ImGui::SliderFloat`).
-5.  **UI**: Ensure `parameterChanged()` handles the new index to keep the UI in sync with automation.
 
-### Advanced ImGui Features
-- DPF-Widgets includes `DearImGuiKnobs` and `DearImGuiToggle`.
-- Check `third_party/DPF-Widgets/opengl/DearImGui.hpp` for available extensions.
+1.  Update `kParamCount` enum in `Plugin.cpp`.
+2.  Initialize in `initParameter()`.
+3.  Add a member variable and handle logic in `run()`.
+4.  Add a widget in `UI::onImGuiDisplay()` (e.g., `ImGui::SliderFloat`).
 
-## Building the Project
+### Adding a New State Key
 
-```bash
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-```
+1.  Increment state count in `Plugin` constructor.
+2.  Initialize key and hints in `initState()`.
+3.  Update logic in `getState()` and `setState()`.
+4.  Handle UI synchronization in `UI::stateChanged()`.
 
-Binaries are generated in `build/bin/` in various formats (LV2, VST3, JACK).
+### Reference
+Referece code: [dear-plugins](https://github.com/DISTRHO/dear-plugins)
 
-## References
-- [DPF Documentation](https://distrho.github.io/DPF/)
-- [Dear ImGui Manual](https://pthom.github.io/imgui_manual_online/v1.89/imgui_manual.html)
-- [Dear Plugins Samples](/home/zxning/code/audio/dear-plugins/)
