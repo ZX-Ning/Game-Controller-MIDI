@@ -21,6 +21,8 @@ dpf_add_plugin(GameControllerMIDI
     UI_TYPE opengl
     FILES_DSP
         src/Plugin.cpp
+        src/Core/SdlManager.cpp
+        src/Logic/MajorScaleMapper.cpp
     FILES_UI
         src/UI.cpp
         ${IMGUI_WIDGET_SRC}

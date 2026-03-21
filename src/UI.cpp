@@ -26,22 +26,10 @@ START_NAMESPACE_DISTRHO
 class GameControllerMIDIUI : public UI {
 public:
     GameControllerMIDIUI()
-        : UI(400, 400) {
-        fTestState = "hello";
-        std::strncpy(fStateBuf, "hello", sizeof(fStateBuf) - 1);
-        fStateBuf[sizeof(fStateBuf) - 1] = '\0';
+        : UI(400, 350) {
     }
 
 protected:
-    void stateChanged(const char* key, const char* value) override {
-        if (std::strcmp(key, "test-state") == 0) {
-            fTestState = value;
-            std::strncpy(fStateBuf, value, sizeof(fStateBuf) - 1);
-            fStateBuf[sizeof(fStateBuf) - 1] = '\0';
-            repaint();
-        }
-    }
-
     void onImGuiDisplay() override {
         const float width = getWidth();
         const float height = getHeight();
@@ -55,7 +43,7 @@ protected:
 
         // Controller Info
         if (GameControllerMIDIPlugin* const plugin = (GameControllerMIDIPlugin*)getPluginInstancePointer()) {
-            if (plugin->fControllerConnected) {
+            if (plugin->fControllerConnected.load()) {
                 ImGui::TextColored(ImVec4(0, 1, 0, 1), "Connected: %s", plugin->fControllerName);
             }
             else {
@@ -99,7 +87,7 @@ protected:
 
         ImGui::Separator();
         ImGui::Text("Last MIDI Messages:");
-        ImGui::BeginChild("MidiList", ImVec2(0, 100), true);
+        ImGui::BeginChild("MidiList", ImVec2(0, 150), true);
 
         if (GameControllerMIDIPlugin* const plugin = (GameControllerMIDIPlugin*)getPluginInstancePointer()) {
             const uint32_t head = plugin->fMidiHistoryIndex.load();
@@ -108,31 +96,37 @@ protected:
                 const auto& msg = plugin->fMidiHistory[idx];
 
                 if (msg.size > 0) {
-                    if (msg.size == 1) {
-                        ImGui::Text("[%02X]", msg.data[0]);
+                    uint8_t status = msg.data[0] & 0xF0;
+                    // uint8_t channel = (msg.data[0] & 0x0F) + 1;
+
+                    if (status == 0x90 && msg.size >= 3 && msg.data[2] > 0) {
+                        int note = msg.data[1];
+                        const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+                        ImGui::TextColored(ImVec4(0, 1, 0, 1), "Note On:  %3d (%s%d) Vel: %d", note, noteNames[note % 12], (note / 12) - 1, msg.data[2]);
                     }
-                    else if (msg.size == 2) {
-                        ImGui::Text("[%02X %02X]", msg.data[0], msg.data[1]);
+                    else if ((status == 0x80 && msg.size >= 3) || (status == 0x90 && msg.size >= 3 && msg.data[2] == 0)) {
+                        int note = msg.data[1];
+                        const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "Note Off: %3d (%s%d)", note, noteNames[note % 12], (note / 12) - 1);
                     }
-                    else if (msg.size == 3) {
-                        ImGui::Text("[%02X %02X %02X]", msg.data[0], msg.data[1], msg.data[2]);
-                    }
-                    else if (msg.size == 4) {
-                        ImGui::Text("[%02X %02X %02X %02X]", msg.data[0], msg.data[1], msg.data[2], msg.data[3]);
+                    else {
+                        if (msg.size == 1) {
+                            ImGui::Text("[%02X]", msg.data[0]);
+                        }
+                        else if (msg.size == 2) {
+                            ImGui::Text("[%02X %02X]", msg.data[0], msg.data[1]);
+                        }
+                        else if (msg.size == 3) {
+                            ImGui::Text("[%02X %02X %02X]", msg.data[0], msg.data[1], msg.data[2]);
+                        }
+                        else if (msg.size == 4) {
+                            ImGui::Text("[%02X %02X %02X %02X]", msg.data[0], msg.data[1], msg.data[2], msg.data[3]);
+                        }
                     }
                 }
             }
         }
         ImGui::EndChild();
-
-        ImGui::Separator();
-        ImGui::Text("State: %s", fTestState.buffer());
-
-        ImGui::InputText("New State", fStateBuf, sizeof(fStateBuf));
-        if (ImGui::IsItemDeactivatedAfterEdit()) {
-            fTestState = fStateBuf;
-            setState("test-state", fStateBuf);
-        }
 
         ImGui::End();
         repaint();  // Force repaint to see button changes
@@ -143,9 +137,6 @@ protected:
     }
 
 private:
-    String fTestState;
-    char fStateBuf[64];
-
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GameControllerMIDIUI)
 };
 

@@ -1,10 +1,10 @@
 # AGENTS.MD - Project Structure and Development Guide
 
-This document provides a technical overview of the `dpf_imgui` project, designed to assist both human engineers and AI agents in understanding and extending this minimal audio plugin framework.
+This document provides a technical overview of the `GameControllerMIDI` project, designed to assist both human engineers and AI agents in understanding and extending this audio plugin framework.
 
 ## Project Overview
 
-This project is a minimal audio plugin template built using the **DISTRHO Plugin Framework (DPF)** and **Dear ImGui**. It demonstrates how to integrate a modern, immediate-mode GUI into a cross-platform audio plugin, including parameter automation and state persistence.
+This project is an audio plugin built using the **DISTRHO Plugin Framework (DPF)**, **Dear ImGui**, and **SDL2**. It translates game controller inputs into MIDI messages using a decoupled, highly extendable architecture.
 
 ## Directory Structure
 
@@ -13,73 +13,59 @@ This project is a minimal audio plugin template built using the **DISTRHO Plugin
 ├── CMakeLists.txt              # Main build configuration
 ├── AGENTS.MD                   # This guide
 ├── src/                        # Plugin source code
+│   ├── Common/                 
+│   │   └── MidiTypes.hpp       # Shared types (RawMidi)
+│   ├── Core/                   
+│   │   ├── IControllerEventHandler.hpp # Interface connecting SDL events to the plugin
+│   │   ├── SdlManager.hpp      # SDL Lifecycle & Hardware Polling (Singleton)
+│   │   └── SdlManager.cpp
+│   ├── Logic/                  
+│   │   ├── IMidiMapper.hpp     # Interface for Note Mapping (Strategy Pattern)
+│   │   ├── MajorScaleMapper.hpp# C-Major X/Y/B/A logic implementation
+│   │   └── MajorScaleMapper.cpp
 │   ├── DistrhoPluginInfo.h     # Metadata (Name, URI, I/O count, Custom UI defines)
-│   ├── Plugin.cpp              # Audio processing logic (DSP) and State management
+│   ├── Plugin.hpp              # DPF Plugin Orchestration
+│   ├── Plugin.cpp
 │   └── UI.cpp                  # Graphical User Interface logic (ImGui)
 └── third_party/                # Dependencies (Git Submodules)
     ├── DPF/                    # Core DISTRHO Plugin Framework
-    └── DPF-Widgets/            # DPF UI extensions including ImGui integration
+    ├── DPF-Widgets/            # DPF UI extensions including ImGui integration
+    └── lockfree/               # Boost.Lockfree for thread-safe communication
 ```
 
-## Key Components
+## Architectural Components
 
-### 1. Metadata (`src/DistrhoPluginInfo.h`)
+The project strictly follows the Single-Responsibility Principle with the following ownership and execution model:
 
-Defines the plugin's identity and capabilities.
+### 1. `SdlManager` (The Hardware Poller)
+A singleton that handles global `SDL_Init` and `SDL_Quit`, and runs the background thread for `SDL_PollEvent`. It holds a reference to an `IControllerEventHandler` (the Plugin) and blindly forwards hardware inputs. It knows nothing about MIDI.
 
-- `DISTRHO_PLUGIN_NAME`: Human-readable name.
-- `DISTRHO_PLUGIN_URI`: Unique identifier for the plugin.
-- `DISTRHO_PLUGIN_HAS_UI`: Set to `1`.
-- `DISTRHO_PLUGIN_WANT_STATE`: Set to `1` to enable custom state keys.
-- `DISTRHO_PLUGIN_WANT_FULL_STATE`: Set to `1` to enable `getState()` serialization.
-- `DISTRHO_UI_USE_CUSTOM`: Set to `1` to use DPF-Widgets integration.
-- `DISTRHO_UI_CUSTOM_INCLUDE_PATH`: Set to `"DearImGui.hpp"`.
-- `DISTRHO_UI_CUSTOM_WIDGET_TYPE`: Set to `DGL_NAMESPACE::ImGuiTopLevelWidget`.
+### 2. `IMidiMapper` (The Translator)
+Pure business logic. Takes raw controller button states as input and outputs `RawMidi` events. To change how the controller plays music (e.g., adding a drum pad mode), implement a new `IMidiMapper`.
 
-### 2. DSP Logic and State (`src/Plugin.cpp`)
+### 3. `GameControllerMIDIPlugin` (The Orchestrator)
+Acts as the central nervous system. 
+- Implements `IControllerEventHandler` to receive SDL events from `SdlManager`.
+- Owns the active `IMidiMapper` strategy.
+- Owns a `boost::lockfree::queue<RawMidi>` to ferry data from the background SDL thread into the high-priority audio `run()` loop.
 
-Inherits from `DISTRHO::Plugin`.
-
-- `initParameter()`: Define parameters (ranges, defaults, symbols).
-- `initState()`: Define state keys. **CRITICAL**: Must set `state.hints = kStateIsHostReadable | kStateIsHostWritable` for persistence.
-- `run()`: The audio callback for signal processing.
-- `getState()` / `setState()`: Handle serialization/deserialization of non-parameter data (e.g., strings).
-- `setParameterValue()` / `getParameterValue()`: Syncs parameters with the host.
-
-### 3. UI Logic (`src/UI.cpp`)
-
-Inherits from `DISTRHO::UI`.
-
-- **Inheritance**: Due to `DISTRHO_UI_USE_CUSTOM`, the `UI` class already inherits from `ImGuiTopLevelWidget`.
-- `parameterChanged()`: Callback for parameter updates.
-- `stateChanged()`: Callback for state updates from the host or DSP.
-- `onImGuiDisplay()`: The immediate-mode draw loop. Use `ImGui::*` calls.
-- **State Updates**: Use `setState("key", value)` to notify the host of changes.
-- **UX Tip**: Use `ImGui::IsItemDeactivatedAfterEdit()` to commit state changes on Enter or Focus loss.
-
-### 4. Build System (`CMakeLists.txt`)
-
-Uses DPF's CMake macros (`dpf_add_plugin`).
-
-- Links `third_party/DPF-Widgets/opengl/DearImGui.cpp`.
-- Configures include paths for `src` and `third_party/DPF-Widgets/opengl`.
+### 4. `GameControllerMIDIUI` (The Observer)
+Builds the UI using Dear ImGui. It safely reads state (like `fControllerConnected`, `fButtonStates`, and `fMidiHistory`) directly from the Plugin instance to render visual feedback. It does not modify audio or controller state directly.
 
 ## Extension Guide for Agents
 
-### Adding a New Parameter
-
-1.  Update `kParamCount` enum in `Plugin.cpp`.
-2.  Initialize in `initParameter()`.
-3.  Add a member variable and handle logic in `run()`.
-4.  Add a widget in `UI::onImGuiDisplay()` (e.g., `ImGui::SliderFloat`).
+### Adding a New Mapping Mode
+1. Create `src/Logic/YourNewMapper.hpp` and `.cpp` implementing `IMidiMapper`.
+2. Update `Plugin.cpp` to instantiate and use your new mapper.
+3. (Optional) Expose a DPF parameter in `initParameter()` to let the user switch between `MajorScaleMapper` and `YourNewMapper` dynamically.
 
 ### Adding a New State Key
+> **Note**: State is currently disabled in `src/DistrhoPluginInfo.h`. Re-enable `DISTRHO_PLUGIN_WANT_STATE` and `DISTRHO_PLUGIN_WANT_FULL_STATE` first.
 
-1.  Increment state count in `Plugin` constructor.
-2.  Initialize key and hints in `initState()`.
-3.  Update logic in `getState()` and `setState()`.
-4.  Handle UI synchronization in `UI::stateChanged()`.
+1. Increment state count in `Plugin` constructor.
+2. Initialize key and hints in `initState()`.
+3. Update logic in `getState()` and `setState()`.
+4. Handle UI synchronization in `UI::stateChanged()`.
 
 ### Reference
 Referece code: [dear-plugins](https://github.com/DISTRHO/dear-plugins)
-
