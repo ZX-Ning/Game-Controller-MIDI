@@ -49,7 +49,43 @@ void GameControllerMIDIPlugin::onControllerButton(uint8_t button, bool pressed, 
     }
 
     if (fMapper) {
+        int oldOctave = fMapper->getOctaveOffset();
         fMapper->onButton(button, pressed, shiftState, fMidiQueue);
+        int newOctave = fMapper->getOctaveOffset();
+
+        if (oldOctave != newOctave) {
+            setParameterValue(kParamOctave, (float)newOctave);
+        }
+    }
+}
+
+void GameControllerMIDIPlugin::onControllerAxis(uint8_t axis, int16_t value, bool shiftState) {
+    if (fMapper) {
+        fMapper->onAxis(axis, value, shiftState, fMidiQueue);
+    }
+}
+
+void GameControllerMIDIPlugin::initParameter(uint32_t index, Parameter& parameter) {
+    if (index == kParamOctave) {
+        parameter.hints = kParameterIsAutomatable | kParameterIsInteger;
+        parameter.name = "Octave";
+        parameter.symbol = "octave";
+        parameter.ranges.def = 0.0f;
+        parameter.ranges.min = -4.0f;
+        parameter.ranges.max = 4.0f;
+    }
+}
+
+float GameControllerMIDIPlugin::getParameterValue(uint32_t index) const {
+    if (index == kParamOctave && fMapper) {
+        return (float)fMapper->getOctaveOffset();
+    }
+    return 0.0f;
+}
+
+void GameControllerMIDIPlugin::setParameterValue(uint32_t index, float value) {
+    if (index == kParamOctave && fMapper) {
+        fMapper->setOctaveOffset((int)value);
     }
 }
 

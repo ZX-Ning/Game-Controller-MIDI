@@ -38,10 +38,10 @@ This project is an audio plugin built using the **DISTRHO Plugin Framework (DPF)
 The project strictly follows the Single-Responsibility Principle with the following ownership and execution model:
 
 ### 1. `SdlManager` (The Hardware Poller)
-A singleton that handles global `SDL_Init` and `SDL_Quit`, and runs the background thread for `SDL_PollEvent`. It holds a reference to an `IControllerEventHandler` (the Plugin) and blindly forwards hardware inputs. It knows nothing about MIDI.
+A singleton that handles global `SDL_Init` and `SDL_Quit`, and runs the background thread for `SDL_PollEvent`. It holds a reference to an `IControllerEventHandler` (the Plugin) and forwards hardware inputs (Buttons and Axes). It knows nothing about MIDI.
 
 ### 2. `IMidiMapper` (The Translator)
-Pure business logic. Takes raw controller button states as input and outputs `RawMidi` events. To change how the controller plays music (e.g., adding a drum pad mode), implement a new `IMidiMapper`.
+Pure business logic. Takes raw controller button and axis states as input and outputs `RawMidi` events. It also provides metadata like `getOctaveOffset()`. To change how the controller plays music, implement a new `IMidiMapper`.
 
 ### 3. `GameControllerMIDIPlugin` (The Orchestrator)
 Acts as the central nervous system. 

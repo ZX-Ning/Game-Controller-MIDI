@@ -45,6 +45,17 @@ protected:
         if (GameControllerMIDIPlugin* const plugin = (GameControllerMIDIPlugin*)getPluginInstancePointer()) {
             if (plugin->fControllerConnected.load()) {
                 ImGui::TextColored(ImVec4(0, 1, 0, 1), "Connected: %s", plugin->fControllerName);
+
+                // Show current octave
+                if (plugin->fMapper) {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("|");
+                    ImGui::SameLine();
+                    int octave = plugin->fMapper->getOctaveOffset();
+                    ImGui::Text("Octave: %+d", octave);
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(D-Pad Left/Right)");
+                }
             }
             else {
                 ImGui::TextColored(ImVec4(1, 0, 0, 1), "Controller Disconnected");

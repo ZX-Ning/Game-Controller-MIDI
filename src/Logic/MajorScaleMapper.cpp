@@ -4,7 +4,7 @@
 
 namespace GCMidi {
 
-MajorScaleMapper::MajorScaleMapper() {
+MajorScaleMapper::MajorScaleMapper() : fOctaveOffset(0) {
     std::memset(fActiveNotes, 0, sizeof(fActiveNotes));
 }
 
@@ -13,23 +13,45 @@ void MajorScaleMapper::onButton(uint8_t button, bool pressed, bool shiftState, b
         return;
     }
 
+    // Handle Octave Control
+    if (pressed) {
+        if (button == SDL_CONTROLLER_BUTTON_DPAD_LEFT) {
+            if (fOctaveOffset > -4) {
+                fOctaveOffset--;
+            }
+            return;
+        }
+        if (button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) {
+            if (fOctaveOffset < 4) {
+                fOctaveOffset++;
+            }
+            return;
+        }
+    }
+
     uint8_t note = 0;
     switch (button) {
         case SDL_CONTROLLER_BUTTON_X:
-            note = shiftState ? 67 : 60;
-            break;  // G4 / C4
+            note = 60;
+            break;  // C4
         case SDL_CONTROLLER_BUTTON_Y:
-            note = shiftState ? 69 : 62;
-            break;  // A4 / D4
+            note = 62;
+            break;  // D4
         case SDL_CONTROLLER_BUTTON_B:
-            note = shiftState ? 71 : 64;
-            break;  // B4 / E4
+            note = 64;
+            break;  // E4
         case SDL_CONTROLLER_BUTTON_A:
-            note = shiftState ? 72 : 65;
-            break;  // C5 / F4
+            note = 65;
+            break;  // F4
     }
 
     if (note > 0) {
+        // Apply octave and shift
+        note += (fOctaveOffset * 12);
+        if (shiftState) {
+            note += 7;
+        }
+
         if (pressed) {
             fActiveNotes[button] = note;
             pushMidiEvent(outQueue, 0x90, note, 100);  // Note On
@@ -41,6 +63,10 @@ void MajorScaleMapper::onButton(uint8_t button, bool pressed, bool shiftState, b
             }
         }
     }
+}
+
+void MajorScaleMapper::onAxis(uint8_t, int16_t, bool, boost::lockfree::queue<RawMidi>&) {
+    // Axis logic (pitch bend, etc.) will be added here later
 }
 
 void MajorScaleMapper::pushMidiEvent(boost::lockfree::queue<RawMidi>& queue, uint8_t status, uint8_t data1, uint8_t data2) {

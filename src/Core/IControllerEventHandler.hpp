@@ -13,6 +13,7 @@ public:
     virtual void onControllerConnected(const char* name) = 0;
     virtual void onControllerDisconnected() = 0;
     virtual void onControllerButton(uint8_t button, bool pressed, bool shiftState) = 0;
+    virtual void onControllerAxis(uint8_t axis, int16_t value, bool shiftState) = 0;
 };
 
 }  // namespace GCMidi

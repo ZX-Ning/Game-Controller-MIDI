@@ -18,7 +18,8 @@ START_NAMESPACE_DISTRHO
 class GameControllerMIDIPlugin : public Plugin, public GCMidi::IControllerEventHandler {
 public:
     enum Parameters {
-        kParamCount = 0
+        kParamOctave = 0,
+        kParamCount
     };
 
     GameControllerMIDIPlugin();
@@ -51,6 +52,13 @@ protected:
     }
 
     /* -------------------------------------------------------------------------------------------------------
+     * Parameters */
+
+    void initParameter(uint32_t index, Parameter& parameter) override;
+    float getParameterValue(uint32_t index) const override;
+    void setParameterValue(uint32_t index, float value) override;
+
+    /* -------------------------------------------------------------------------------------------------------
      * Process */
 
     void activate() override {}
@@ -62,6 +70,7 @@ public:
     void onControllerConnected(const char* name) override;
     void onControllerDisconnected() override;
     void onControllerButton(uint8_t button, bool pressed, bool shiftState) override;
+    void onControllerAxis(uint8_t axis, int16_t value, bool shiftState) override;
 
     // For UI feedback
     static const uint32_t kMidiHistorySize = 128;
@@ -72,12 +81,12 @@ public:
     std::atomic<bool> fControllerConnected;
     bool fButtonStates[SDL_CONTROLLER_BUTTON_MAX];
 
+    // Active MIDI Mapping Strategy
+    std::unique_ptr<GCMidi::IMidiMapper> fMapper;
+
 private:
     // Thread-safe MIDI event queue for internal communication
     boost::lockfree::queue<GCMidi::RawMidi> fMidiQueue;
-
-    // Active MIDI Mapping Strategy
-    std::unique_ptr<GCMidi::IMidiMapper> fMapper;
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GameControllerMIDIPlugin)
 };

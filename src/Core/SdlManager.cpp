@@ -133,6 +133,16 @@ void SdlManager::loop() {
                     }
                     break;
                 }
+
+                case SDL_CONTROLLERAXISMOTION: {
+                    if (fHandler && fController) {
+                        uint8_t axis = event.caxis.axis;
+                        int16_t value = event.caxis.value;
+                        bool shift = SDL_GameControllerGetButton(fController, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) == 1;
+                        fHandler->onControllerAxis(axis, value, shift);
+                    }
+                    break;
+                }
             }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
