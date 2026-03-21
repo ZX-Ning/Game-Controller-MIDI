@@ -17,8 +17,8 @@
 #ifndef DISTRHO_PLUGIN_INFO_H_INCLUDED
 #define DISTRHO_PLUGIN_INFO_H_INCLUDED
 
-#define DISTRHO_PLUGIN_NAME "DPF ImGui Minimal"
-#define DISTRHO_PLUGIN_URI  "http://distrho.sf.net/plugins/DPFImGuiMinimal"
+#define DISTRHO_PLUGIN_NAME "Game Controller MIDI"
+#define DISTRHO_PLUGIN_URI  "http://distrho.sf.net/plugins/GameControllerMIDI"
 
 #define DISTRHO_PLUGIN_HAS_UI             1
 #define DISTRHO_PLUGIN_IS_SYNTH           0

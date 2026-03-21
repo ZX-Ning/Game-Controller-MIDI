@@ -23,10 +23,10 @@
 
 START_NAMESPACE_DISTRHO
 
-class ImGuiMinimalUI : public UI {
+class GameControllerMIDIUI : public UI {
 public:
-    ImGuiMinimalUI()
-        : UI(400, 300) {
+    GameControllerMIDIUI()
+        : UI(400, 400) {
         fTestState = "hello";
         std::strncpy(fStateBuf, "hello", sizeof(fStateBuf) - 1);
         fStateBuf[sizeof(fStateBuf) - 1] = '\0';
@@ -50,18 +50,61 @@ protected:
         ImGui::SetNextWindowSize(ImVec2(width, height));
         ImGui::Begin("Main", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 
-        ImGui::Text("DPF ImGui MIDI Minimal");
+        ImGui::Text("Game Controller MIDI");
         ImGui::Separator();
 
-        ImGui::Text("Last MIDI Messages:");
-        ImGui::BeginChild("MidiList", ImVec2(0, 150), true);
+        // Controller Info
+        if (GameControllerMIDIPlugin* const plugin = (GameControllerMIDIPlugin*)getPluginInstancePointer()) {
+            if (plugin->fControllerConnected) {
+                ImGui::TextColored(ImVec4(0, 1, 0, 1), "Connected: %s", plugin->fControllerName);
+            }
+            else {
+                ImGui::TextColored(ImVec4(1, 0, 0, 1), "Controller Disconnected");
+            }
 
-        // Use direct access to get the plugin instance
-        if (ImGuiMinimalPlugin* const plugin = (ImGuiMinimalPlugin*)getPluginInstancePointer()) {
-            const uint32_t head = plugin->fMidiHistoryIndex;
-            for (uint32_t i = 0; i < ImGuiMinimalPlugin::kMidiHistorySize; ++i) {
-                // Show from newest to oldest
-                const uint32_t idx = (head + ImGuiMinimalPlugin::kMidiHistorySize - i) % ImGuiMinimalPlugin::kMidiHistorySize;
+            ImGui::Separator();
+            ImGui::Text("Buttons:");
+
+            auto drawButton = [&](const char* label, int buttonIdx) {
+                bool down = plugin->fButtonStates[buttonIdx];
+                if (down) {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
+                }
+                ImGui::Button(label, ImVec2(40, 40));
+                if (down) {
+                    ImGui::PopStyleColor();
+                }
+            };
+
+            ImGui::BeginGroup();
+            ImGui::Dummy(ImVec2(45, 0));
+            ImGui::SameLine();
+            drawButton("Y", SDL_CONTROLLER_BUTTON_Y);
+            drawButton("X", SDL_CONTROLLER_BUTTON_X);
+            ImGui::SameLine();
+            ImGui::Dummy(ImVec2(40, 0));
+            ImGui::SameLine();
+            drawButton("B", SDL_CONTROLLER_BUTTON_B);
+            ImGui::Dummy(ImVec2(45, 0));
+            ImGui::SameLine();
+            drawButton("A", SDL_CONTROLLER_BUTTON_A);
+            ImGui::EndGroup();
+
+            ImGui::SameLine();
+            ImGui::BeginGroup();
+            ImGui::Dummy(ImVec2(0, 20));
+            ImGui::Text("RB (Shift): %s", plugin->fButtonStates[SDL_CONTROLLER_BUTTON_RIGHTSHOULDER] ? "PRESSED" : "released");
+            ImGui::EndGroup();
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Last MIDI Messages:");
+        ImGui::BeginChild("MidiList", ImVec2(0, 100), true);
+
+        if (GameControllerMIDIPlugin* const plugin = (GameControllerMIDIPlugin*)getPluginInstancePointer()) {
+            const uint32_t head = plugin->fMidiHistoryIndex.load();
+            for (uint32_t i = 0; i < GameControllerMIDIPlugin::kMidiHistorySize; ++i) {
+                const uint32_t idx = (head + GameControllerMIDIPlugin::kMidiHistorySize - i) % GameControllerMIDIPlugin::kMidiHistorySize;
                 const auto& msg = plugin->fMidiHistory[idx];
 
                 if (msg.size > 0) {
@@ -92,6 +135,7 @@ protected:
         }
 
         ImGui::End();
+        repaint();  // Force repaint to see button changes
     }
 
     void parameterChanged(uint32_t, float) override {
@@ -102,11 +146,11 @@ private:
     String fTestState;
     char fStateBuf[64];
 
-    DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ImGuiMinimalUI)
+    DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GameControllerMIDIUI)
 };
 
 UI* createUI() {
-    return new ImGuiMinimalUI();
+    return new GameControllerMIDIUI();
 }
 
 END_NAMESPACE_DISTRHO

@@ -17,13 +17,20 @@
 #ifndef PLUGIN_HPP_INCLUDED
 #define PLUGIN_HPP_INCLUDED
 
+#include <SDL.h>
+
+#include <atomic>
+#include <boost/lockfree/queue.hpp>
+#include <chrono>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 #include "DistrhoPlugin.hpp"
 
 START_NAMESPACE_DISTRHO
 
-class ImGuiMinimalPlugin : public Plugin {
+class GameControllerMIDIPlugin : public Plugin {
 public:
     enum Parameters {
         kParamCount = 0
@@ -32,20 +39,22 @@ public:
     struct RawMidi {
         uint8_t data[4];
         uint8_t size;
+        uint32_t frame;
     };
 
-    ImGuiMinimalPlugin();
+    GameControllerMIDIPlugin();
+    ~GameControllerMIDIPlugin() override;
 
 protected:
     /* -------------------------------------------------------------------------------------------------------
      * Information */
 
     const char* getLabel() const override {
-        return "ImGuiMinimal";
+        return "GameControllerMIDI";
     }
 
     const char* getDescription() const override {
-        return "Minimal DPF MIDI plugin with ImGui UI";
+        return "Game controller to MIDI plugin";
     }
 
     const char* getMaker() const override {
@@ -65,7 +74,7 @@ protected:
     }
 
     int64_t getUniqueId() const override {
-        return d_cconst('d', 'i', 'm', 'p');
+        return d_cconst('g', 'c', 'm', 'i');
     }
 
     /* -------------------------------------------------------------------------------------------------------
@@ -82,14 +91,33 @@ protected:
     void run(const float** inputs, float** outputs, uint32_t frames, const MidiEvent* midiEvents, uint32_t midiEventCount) override;
 
 public:
+    // For UI feedback
     static const uint32_t kMidiHistorySize = 128;
     std::vector<RawMidi> fMidiHistory;
-    uint32_t fMidiHistoryIndex;
+    std::atomic<uint32_t> fMidiHistoryIndex;
+
+    char fControllerName[256];
+    bool fControllerConnected;
+    bool fButtonStates[SDL_CONTROLLER_BUTTON_MAX];
+
+    void handleSdlEvent(const SDL_Event& event);
+    void pushMidiEvent(uint8_t status, uint8_t data1, uint8_t data2);
 
 private:
+    void checkControllerStatus();
+
+    // SDL management handled by SdlManager now
+    SDL_GameController* fController;
+
+    // Thread-safe MIDI event queue for internal communication
+    boost::lockfree::queue<RawMidi> fMidiQueue;
+
+    // Track active notes per button to send correct NoteOff
+    uint8_t fActiveNotes[SDL_CONTROLLER_BUTTON_MAX];
+
     String fTestState;
 
-    DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ImGuiMinimalPlugin)
+    DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GameControllerMIDIPlugin)
 };
 
 END_NAMESPACE_DISTRHO
