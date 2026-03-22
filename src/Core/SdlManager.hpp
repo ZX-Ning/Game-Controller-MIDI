@@ -28,6 +28,11 @@ private:
     void loop();
     void checkControllerStatus();
 
+    void handleEvent(const SDL_Event& event);
+    void handleControllerRemoved(const SDL_ControllerDeviceEvent& event);
+    void handleControllerButton(const SDL_ControllerButtonEvent& event);
+    void handleControllerAxis(const SDL_ControllerAxisEvent& event);
+
     std::mutex fMutex;
     std::thread fThread;
     std::atomic<bool> fRunning;

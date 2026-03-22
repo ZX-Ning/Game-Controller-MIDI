@@ -2,15 +2,20 @@
 
 This document provides a technical overview of the `GameControllerMIDI` project, designed to assist both human engineers and AI agents in understanding and extending this audio plugin framework.
 
+## NOTE
+**Follow the best practice of modern C++ (C++ 23) and real time audio application, and ensure high readability and maintainability of the codebase.**
+
 ## Project Overview
 
-This project is an audio plugin built using the **DISTRHO Plugin Framework (DPF)**, **Dear ImGui**, and **SDL2**. It translates game controller inputs into MIDI messages using a decoupled, highly extendable architecture.
+This project is an audio plugin built using the **DISTRHO Plugin Framework (DPF)**, **Dear ImGui**, and **SDL2**. It translates game controller inputs into MIDI messages using a decoupled, highly extendable architecture. 
 
 ## Directory Structure
 
 ```text
 .
-├── CMakeLists.txt              # Main build configuration
+├── CMakeLists.txt              # Main build configuration (uses vcpkg)
+├── vcpkg.json                  # Dependency manifest (SDL2, Boost)
+├── .vscode/settings.json       # VS Code CMake/vcpkg integration
 ├── AGENTS.MD                   # This guide
 ├── src/                        # Plugin source code
 │   ├── Common/                 
@@ -27,15 +32,24 @@ This project is an audio plugin built using the **DISTRHO Plugin Framework (DPF)
 │   ├── Plugin.hpp              # DPF Plugin Orchestration
 │   ├── Plugin.cpp
 │   └── UI.cpp                  # Graphical User Interface logic (ImGui)
-└── third_party/                # Dependencies (Git Submodules)
+└── third_party/                # Local dependencies (Git Submodules)
     ├── DPF/                    # Core DISTRHO Plugin Framework
-    ├── DPF-Widgets/            # DPF UI extensions including ImGui integration
-    └── lockfree/               # Boost.Lockfree for thread-safe communication
+    └── DPF-Widgets/            # DPF UI extensions including ImGui integration
 ```
 
-## Architectural Components
+## Dependency Management
 
-The project strictly follows the Single-Responsibility Principle with the following ownership and execution model:
+The project uses **vcpkg** in manifest mode to manage external libraries:
+- **SDL2**: For game controller abstraction.
+- **Boost.Lockfree**: For high-performance, thread-safe MIDI event queuing between the hardware thread and the audio thread.
+
+The **DISTRHO Plugin Framework (DPF)** and its ImGui widgets are managed as Git submodules in `third_party/` because they are deeply integrated into the build process.
+
+## Build Requirements
+
+- **CMake** 3.10+
+- **vcpkg** (pointed to by `CMAKE_TOOLCHAIN_FILE`)
+- **Git** (for submodules)
 
 ### 1. `SdlManager` (The Hardware Poller)
 A singleton that handles global `SDL_Init` and `SDL_Quit`, and runs the background thread for `SDL_PollEvent`. It holds a reference to an `IControllerEventHandler` (the Plugin) and forwards hardware inputs (Buttons and Axes). It knows nothing about MIDI.

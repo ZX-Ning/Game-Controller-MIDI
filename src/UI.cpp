@@ -41,97 +41,108 @@ protected:
         ImGui::Text("Game Controller MIDI");
         ImGui::Separator();
 
-        // Controller Info
-        if (GameControllerMIDIPlugin* const plugin = (GameControllerMIDIPlugin*)getPluginInstancePointer()) {
-            if (plugin->fControllerConnected.load()) {
-                ImGui::TextColored(ImVec4(0, 1, 0, 1), "Connected: %s", plugin->fControllerName);
-
-                // Show current octave
-                if (plugin->fMapper) {
-                    ImGui::SameLine();
-                    ImGui::TextDisabled("|");
-                    ImGui::SameLine();
-                    int octave = plugin->fMapper->getOctaveOffset();
-                    ImGui::Text("Octave: %+d", octave);
-                    ImGui::SameLine();
-                    ImGui::TextDisabled("(D-Pad Left/Right)");
-                }
-            }
-            else {
-                ImGui::TextColored(ImVec4(1, 0, 0, 1), "Controller Disconnected");
-            }
-
-            ImGui::Separator();
-            ImGui::Text("Buttons:");
-
-            auto drawButton = [&](const char* label, int buttonIdx) {
-                bool down = plugin->fButtonStates[buttonIdx];
-                if (down) {
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
-                }
-                ImGui::Button(label, ImVec2(40, 40));
-                if (down) {
-                    ImGui::PopStyleColor();
-                }
-            };
-
-            ImGui::BeginGroup();
-            ImGui::Dummy(ImVec2(45, 0));
-            ImGui::SameLine();
-            drawButton("Y", SDL_CONTROLLER_BUTTON_Y);
-            drawButton("X", SDL_CONTROLLER_BUTTON_X);
-            ImGui::SameLine();
-            ImGui::Dummy(ImVec2(40, 0));
-            ImGui::SameLine();
-            drawButton("B", SDL_CONTROLLER_BUTTON_B);
-            ImGui::Dummy(ImVec2(45, 0));
-            ImGui::SameLine();
-            drawButton("A", SDL_CONTROLLER_BUTTON_A);
-            ImGui::EndGroup();
-
-            ImGui::SameLine();
-            ImGui::BeginGroup();
-            ImGui::Dummy(ImVec2(0, 20));
-            ImGui::Text("RB (Shift): %s", plugin->fButtonStates[SDL_CONTROLLER_BUTTON_RIGHTSHOULDER] ? "PRESSED" : "released");
-            ImGui::EndGroup();
+        GameControllerMIDIPlugin* const plugin = (GameControllerMIDIPlugin*)getPluginInstancePointer();
+        if (!plugin || !plugin->fDispatcher) {
+            ImGui::TextColored(ImVec4(1, 0, 0, 1), "Error: Plugin or Dispatcher not found");
+            ImGui::End();
+            return;
         }
+
+        auto& dispatcher = *plugin->fDispatcher;
+
+        // Controller Info
+        if (dispatcher.isConnected()) {
+            ImGui::TextColored(ImVec4(0, 1, 0, 1), "Connected: %s", dispatcher.getControllerName().c_str());
+
+            // Show current octave
+            if (auto mapper = dispatcher.getMapper()) {
+                ImGui::SameLine();
+                ImGui::TextDisabled("|");
+                ImGui::SameLine();
+                ImGui::Text("Octave: %+d", mapper->getOctaveOffset());
+                ImGui::SameLine();
+                ImGui::TextDisabled("(D-Pad L/R)");
+            }
+        }
+        else {
+            ImGui::TextColored(ImVec4(1, 0, 0, 1), "Controller Disconnected");
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Buttons:");
+
+        auto drawButton = [&](const char* label, int buttonIdx) {
+            bool down = dispatcher.getButtonState(buttonIdx);
+            if (down) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
+            }
+            ImGui::Button(label, ImVec2(40, 40));
+            if (down) {
+                ImGui::PopStyleColor();
+            }
+        };
+
+        ImGui::BeginGroup();
+        ImGui::Dummy(ImVec2(45, 0));
+        ImGui::SameLine();
+        drawButton("Y", SDL_CONTROLLER_BUTTON_Y);
+        drawButton("X", SDL_CONTROLLER_BUTTON_X);
+        ImGui::SameLine();
+        ImGui::Dummy(ImVec2(40, 0));
+        ImGui::SameLine();
+        drawButton("B", SDL_CONTROLLER_BUTTON_B);
+        ImGui::Dummy(ImVec2(45, 0));
+        ImGui::SameLine();
+        drawButton("A", SDL_CONTROLLER_BUTTON_A);
+        ImGui::EndGroup();
+
+        ImGui::SameLine();
+        ImGui::BeginGroup();
+        ImGui::Dummy(ImVec2(0, 20));
+        ImGui::Text("RB (Shift): %s", dispatcher.getButtonState(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) ? "PRESSED" : "released");
+        ImGui::EndGroup();
 
         ImGui::Separator();
         ImGui::Text("Last MIDI Messages:");
         ImGui::BeginChild("MidiList", ImVec2(0, 150), true);
 
-        if (GameControllerMIDIPlugin* const plugin = (GameControllerMIDIPlugin*)getPluginInstancePointer()) {
-            const uint32_t head = plugin->fMidiHistoryIndex.load();
-            for (uint32_t i = 0; i < GameControllerMIDIPlugin::kMidiHistorySize; ++i) {
-                const uint32_t idx = (head + GameControllerMIDIPlugin::kMidiHistorySize - i) % GameControllerMIDIPlugin::kMidiHistorySize;
-                const auto& msg = plugin->fMidiHistory[idx];
+        const uint32_t head = plugin->fMidiHistoryIndex.load();
+        for (uint32_t i = 0; i < GameControllerMIDIPlugin::kMidiHistorySize; ++i) {
+            const uint32_t idx = (head + GameControllerMIDIPlugin::kMidiHistorySize - i) % GameControllerMIDIPlugin::kMidiHistorySize;
+            const uint64_t packed = plugin->fMidiHistory[idx].load(std::memory_order_relaxed);
 
-                if (msg.size > 0) {
-                    uint8_t status = msg.data[0] & 0xF0;
+            if (packed > 0) {
+                uint8_t size = packed & 0xFF;
+                uint8_t data[4];
+                data[0] = (packed >> 8) & 0xFF;
+                data[1] = (packed >> 16) & 0xFF;
+                data[2] = (packed >> 24) & 0xFF;
+                data[3] = (packed >> 32) & 0xFF;
 
-                    if (status == 0x90 && msg.size >= 3 && msg.data[2] > 0) {
-                        int note = msg.data[1];
-                        const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-                        ImGui::TextColored(ImVec4(0, 1, 0, 1), "Note On:  %3d (%s%d) Vel: %d", note, noteNames[note % 12], (note / 12) - 1, msg.data[2]);
+                uint8_t status = data[0] & 0xF0;
+
+                if (status == 0x90 && size >= 3 && data[2] > 0) {
+                    int note = data[1];
+                    const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+                    ImGui::TextColored(ImVec4(0, 1, 0, 1), "Note On:  %3d (%s%d) Vel: %d", note, noteNames[note % 12], (note / 12) - 1, data[2]);
+                }
+                else if ((status == 0x80 && size >= 3) || (status == 0x90 && size >= 3 && data[2] == 0)) {
+                    int note = data[1];
+                    const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "Note Off: %3d (%s%d)", note, noteNames[note % 12], (note / 12) - 1);
+                }
+                else {
+                    if (size == 1) {
+                        ImGui::Text("[%02X]", data[0]);
                     }
-                    else if ((status == 0x80 && msg.size >= 3) || (status == 0x90 && msg.size >= 3 && msg.data[2] == 0)) {
-                        int note = msg.data[1];
-                        const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "Note Off: %3d (%s%d)", note, noteNames[note % 12], (note / 12) - 1);
+                    else if (size == 2) {
+                        ImGui::Text("[%02X %02X]", data[0], data[1]);
                     }
-                    else {
-                        if (msg.size == 1) {
-                            ImGui::Text("[%02X]", msg.data[0]);
-                        }
-                        else if (msg.size == 2) {
-                            ImGui::Text("[%02X %02X]", msg.data[0], msg.data[1]);
-                        }
-                        else if (msg.size == 3) {
-                            ImGui::Text("[%02X %02X %02X]", msg.data[0], msg.data[1], msg.data[2]);
-                        }
-                        else if (msg.size == 4) {
-                            ImGui::Text("[%02X %02X %02X %02X]", msg.data[0], msg.data[1], msg.data[2], msg.data[3]);
-                        }
+                    else if (size == 3) {
+                        ImGui::Text("[%02X %02X %02X]", data[0], data[1], data[2]);
+                    }
+                    else if (size == 4) {
+                        ImGui::Text("[%02X %02X %02X %02X]", data[0], data[1], data[2], data[3]);
                     }
                 }
             }
@@ -139,7 +150,7 @@ protected:
         ImGui::EndChild();
 
         ImGui::End();
-        repaint();  // Force repaint to see button changes
+        repaint();  // Force repaint to see changes
     }
 
     void parameterChanged(uint32_t, float) override {

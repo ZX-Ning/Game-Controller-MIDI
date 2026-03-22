@@ -103,50 +103,70 @@ void SdlManager::loop() {
     while (fRunning) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            std::lock_guard<std::mutex> lock(fMutex);
-
-            switch (event.type) {
-                case SDL_CONTROLLERDEVICEADDED:
-                    checkControllerStatus();
-                    break;
-
-                case SDL_CONTROLLERDEVICEREMOVED:
-                    if (fController) {
-                        SDL_JoystickID instanceId = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(fController));
-                        if (instanceId == (SDL_JoystickID)event.cdevice.which) {
-                            SDL_GameControllerClose(fController);
-                            fController = nullptr;
-                            if (fHandler) {
-                                fHandler->onControllerDisconnected();
-                            }
-                        }
-                    }
-                    break;
-
-                case SDL_CONTROLLERBUTTONDOWN:
-                case SDL_CONTROLLERBUTTONUP: {
-                    if (fHandler && fController) {
-                        bool down = (event.type == SDL_CONTROLLERBUTTONDOWN);
-                        uint8_t button = event.cbutton.button;
-                        bool shift = SDL_GameControllerGetButton(fController, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) == 1;
-                        fHandler->onControllerButton(button, down, shift);
-                    }
-                    break;
-                }
-
-                case SDL_CONTROLLERAXISMOTION: {
-                    if (fHandler && fController) {
-                        uint8_t axis = event.caxis.axis;
-                        int16_t value = event.caxis.value;
-                        bool shift = SDL_GameControllerGetButton(fController, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) == 1;
-                        fHandler->onControllerAxis(axis, value, shift);
-                    }
-                    break;
-                }
-            }
+            handleEvent(event);
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+}
+
+void SdlManager::handleEvent(const SDL_Event& event) {
+    std::lock_guard<std::mutex> lock(fMutex);
+
+    switch (event.type) {
+        case SDL_CONTROLLERDEVICEADDED:
+            checkControllerStatus();
+            break;
+
+        case SDL_CONTROLLERDEVICEREMOVED:
+            handleControllerRemoved(event.cdevice);
+            break;
+
+        case SDL_CONTROLLERBUTTONDOWN:
+        case SDL_CONTROLLERBUTTONUP:
+            handleControllerButton(event.cbutton);
+            break;
+
+        case SDL_CONTROLLERAXISMOTION:
+            handleControllerAxis(event.caxis);
+            break;
+    }
+}
+
+void SdlManager::handleControllerRemoved(const SDL_ControllerDeviceEvent& event) {
+    if (!fController) {
+        return;
+    }
+
+    SDL_JoystickID instanceId = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(fController));
+    if (instanceId == (SDL_JoystickID)event.which) {
+        SDL_GameControllerClose(fController);
+        fController = nullptr;
+        if (fHandler) {
+            fHandler->onControllerDisconnected();
+        }
+    }
+}
+
+void SdlManager::handleControllerButton(const SDL_ControllerButtonEvent& event) {
+    if (!fHandler || !fController) {
+        return;
+    }
+
+    bool down = (event.type == SDL_CONTROLLERBUTTONDOWN);
+    uint8_t button = event.button;
+    bool shift = SDL_GameControllerGetButton(fController, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) == 1;
+    fHandler->onControllerButton(button, down, shift);
+}
+
+void SdlManager::handleControllerAxis(const SDL_ControllerAxisEvent& event) {
+    if (!fHandler || !fController) {
+        return;
+    }
+
+    uint8_t axis = event.axis;
+    int16_t value = event.value;
+    bool shift = SDL_GameControllerGetButton(fController, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) == 1;
+    fHandler->onControllerAxis(axis, value, shift);
 }
 
 }  // namespace GCMidi

@@ -1,21 +1,15 @@
 #ifndef PLUGIN_HPP_INCLUDED
 #define PLUGIN_HPP_INCLUDED
 
-#include <SDL.h>
-
 #include <atomic>
-#include <boost/lockfree/queue.hpp>
 #include <memory>
-#include <vector>
 
-#include "Common/MidiTypes.hpp"
-#include "Core/IControllerEventHandler.hpp"
+#include "Core/EventDispatcher.hpp"
 #include "DistrhoPlugin.hpp"
-#include "Logic/IMidiMapper.hpp"
 
 START_NAMESPACE_DISTRHO
 
-class GameControllerMIDIPlugin : public Plugin, public GCMidi::IControllerEventHandler {
+class GameControllerMIDIPlugin : public Plugin {
 public:
     enum Parameters {
         kParamOctave = 0,
@@ -26,7 +20,7 @@ public:
     ~GameControllerMIDIPlugin() override;
 
 protected:
-    /* -------------------------------------------------------------------------------------------------------
+    /* -----------------------------------------------------
      * Information */
 
     const char* getLabel() const override {
@@ -51,42 +45,30 @@ protected:
         return d_cconst('g', 'c', 'm', 'i');
     }
 
-    /* -------------------------------------------------------------------------------------------------------
+    /* ------------------------------------------------------------------
      * Parameters */
 
     void initParameter(uint32_t index, Parameter& parameter) override;
     float getParameterValue(uint32_t index) const override;
     void setParameterValue(uint32_t index, float value) override;
 
-    /* -------------------------------------------------------------------------------------------------------
+    /* -----------------------------------------------------------------
      * Process */
 
     void activate() override {}
     void run(const float** inputs, float** outputs, uint32_t frames, const MidiEvent* midiEvents, uint32_t midiEventCount) override;
 
 public:
-    /* -------------------------------------------------------------------------------------------------------
-     * IControllerEventHandler implementation */
-    void onControllerConnected(const char* name) override;
-    void onControllerDisconnected() override;
-    void onControllerButton(uint8_t button, bool pressed, bool shiftState) override;
-    void onControllerAxis(uint8_t axis, int16_t value, bool shiftState) override;
+    // Core logic hub
+    std::unique_ptr<GCMidi::EventDispatcher> fDispatcher;
 
-    // For UI feedback
+    // UI feedback history (DSP side)
     static const uint32_t kMidiHistorySize = 128;
-    std::vector<GCMidi::RawMidi> fMidiHistory;
+    std::atomic<uint64_t> fMidiHistory[kMidiHistorySize];
     std::atomic<uint32_t> fMidiHistoryIndex;
 
-    char fControllerName[256];
-    std::atomic<bool> fControllerConnected;
-    bool fButtonStates[SDL_CONTROLLER_BUTTON_MAX];
-
-    // Active MIDI Mapping Strategy
-    std::unique_ptr<GCMidi::IMidiMapper> fMapper;
-
 private:
-    // Thread-safe MIDI event queue for internal communication
-    boost::lockfree::queue<GCMidi::RawMidi> fMidiQueue;
+    static std::atomic<int> sInstanceCount;
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GameControllerMIDIPlugin)
 };

@@ -3,6 +3,8 @@
 
 #include <SDL.h>
 
+#include <atomic>
+
 #include "IMidiMapper.hpp"
 
 namespace GCMidi {
@@ -40,7 +42,7 @@ private:
     // Track active notes per button to send correct NoteOff
     uint8_t fActiveNotes[SDL_CONTROLLER_BUTTON_MAX];
 
-    int fOctaveOffset;
+    std::atomic<int> fOctaveOffset;
 };
 
 }  // namespace GCMidi

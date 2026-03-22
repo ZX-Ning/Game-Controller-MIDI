@@ -19,14 +19,16 @@
 
 #define DISTRHO_PLUGIN_NAME "Game Controller MIDI"
 #define DISTRHO_PLUGIN_URI  "http://distrho.sf.net/plugins/GameControllerMIDI"
+#define DISTRHO_PLUGIN_CLAP_ID "studio.kx.distrho.examples.info"
+#define DISTRHO_PLUGIN_HAS_UI                              1
+#define DISTRHO_PLUGIN_IS_SYNTH                            0
+#define DISTRHO_PLUGIN_WANT_STATE                          0
+#define DISTRHO_PLUGIN_WANT_FULL_STATE                     0
+#define DISTRHO_PLUGIN_WANT_DIRECT_ACCESS                  1
+#define DISTRHO_PLUGIN_WANT_MIDI_INPUT                     1
+#define DISTRHO_PLUGIN_WANT_MIDI_OUTPUT                    1
+#define DISTRHO_PLUGIN_WANT_PARAMETER_VALUE_CHANGE_REQUEST 1
 
-#define DISTRHO_PLUGIN_HAS_UI             1
-#define DISTRHO_PLUGIN_IS_SYNTH           0
-#define DISTRHO_PLUGIN_WANT_STATE         0
-#define DISTRHO_PLUGIN_WANT_FULL_STATE    0
-#define DISTRHO_PLUGIN_WANT_DIRECT_ACCESS 1
-#define DISTRHO_PLUGIN_WANT_MIDI_INPUT    1
-#define DISTRHO_PLUGIN_WANT_MIDI_OUTPUT   1
 
 #define DISTRHO_UI_USE_CUSTOM          1
 #define DISTRHO_UI_CUSTOM_INCLUDE_PATH "DearImGui.hpp"

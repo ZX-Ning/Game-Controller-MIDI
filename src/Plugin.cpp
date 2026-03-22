@@ -3,66 +3,46 @@
 #include <cstring>
 
 #include "Core/SdlManager.hpp"
-#include "Logic/MajorScaleMapper.hpp"
+
+namespace {
+
+uint64_t packMidi(const MidiEvent& ev) {
+    if (ev.size > 4) {
+        return 0;
+    }
+    uint64_t packed = ev.size;
+    for (uint32_t i = 0; i < ev.size; ++i) {
+        packed |= (static_cast<uint64_t>(ev.data[i]) << (8 * (i + 1)));
+    }
+    return packed;
+}
+
+}  // namespace
 
 START_NAMESPACE_DISTRHO
 
+std::atomic<int> GameControllerMIDIPlugin::sInstanceCount(0);
+
 GameControllerMIDIPlugin::GameControllerMIDIPlugin()
     : Plugin(kParamCount, 0, 0),
-      fMidiHistoryIndex(0),
-      fControllerConnected(false),
-      fMidiQueue(256) {
-    std::memset(fControllerName, 0, sizeof(fControllerName));
-    std::memset(fButtonStates, 0, sizeof(fButtonStates));
-
-    fMidiHistory.resize(kMidiHistorySize);
-
-    fMapper = std::make_unique<GCMidi::MajorScaleMapper>();
-
-    GCMidi::SdlManager::getInstance().setEventHandler(this);
+      fMidiHistoryIndex(0) {
+    int count = ++sInstanceCount;
+    if (count > 1) {
+        d_stderr2("WARNING: Multiple GameControllerMIDI instances detected (%d)! This plugin is designed for a single instance only.", count);
+    }
+    for (uint32_t i = 0; i < kMidiHistorySize; ++i) {
+        fMidiHistory[i].store(0, std::memory_order_relaxed);
+    }
+    // Create the dispatcher (owned by this plugin)
+    fDispatcher = std::make_unique<GCMidi::EventDispatcher>();
+    // Register with the global SDL pump
+    GCMidi::SdlManager::getInstance().setEventHandler(fDispatcher.get());
 }
 
 GameControllerMIDIPlugin::~GameControllerMIDIPlugin() {
+    // Unregister before destruction
     GCMidi::SdlManager::getInstance().setEventHandler(nullptr);
-}
-
-void GameControllerMIDIPlugin::onControllerConnected(const char* name) {
-    fControllerConnected = true;
-    if (name) {
-        std::strncpy(fControllerName, name, sizeof(fControllerName) - 1);
-        fControllerName[sizeof(fControllerName) - 1] = '\0';
-    }
-    else {
-        std::strncpy(fControllerName, "Unknown Controller", sizeof(fControllerName) - 1);
-    }
-}
-
-void GameControllerMIDIPlugin::onControllerDisconnected() {
-    fControllerConnected = false;
-    std::memset(fControllerName, 0, sizeof(fControllerName));
-    std::memset(fButtonStates, 0, sizeof(fButtonStates));
-}
-
-void GameControllerMIDIPlugin::onControllerButton(uint8_t button, bool pressed, bool shiftState) {
-    if (button < SDL_CONTROLLER_BUTTON_MAX) {
-        fButtonStates[button] = pressed;
-    }
-
-    if (fMapper) {
-        int oldOctave = fMapper->getOctaveOffset();
-        fMapper->onButton(button, pressed, shiftState, fMidiQueue);
-        int newOctave = fMapper->getOctaveOffset();
-
-        if (oldOctave != newOctave) {
-            setParameterValue(kParamOctave, (float)newOctave);
-        }
-    }
-}
-
-void GameControllerMIDIPlugin::onControllerAxis(uint8_t axis, int16_t value, bool shiftState) {
-    if (fMapper) {
-        fMapper->onAxis(axis, value, shiftState, fMidiQueue);
-    }
+    sInstanceCount--;
 }
 
 void GameControllerMIDIPlugin::initParameter(uint32_t index, Parameter& parameter) {
@@ -77,46 +57,68 @@ void GameControllerMIDIPlugin::initParameter(uint32_t index, Parameter& paramete
 }
 
 float GameControllerMIDIPlugin::getParameterValue(uint32_t index) const {
-    if (index == kParamOctave && fMapper) {
-        return (float)fMapper->getOctaveOffset();
+    if (index == kParamOctave && fDispatcher) {
+        if (auto mapper = fDispatcher->getMapper()) {
+            return (float)mapper->getOctaveOffset();
+        }
     }
     return 0.0f;
 }
 
 void GameControllerMIDIPlugin::setParameterValue(uint32_t index, float value) {
-    if (index == kParamOctave && fMapper) {
-        fMapper->setOctaveOffset((int)value);
+    if (index == kParamOctave && fDispatcher) {
+        if (auto mapper = fDispatcher->getMapper()) {
+            mapper->setOctaveOffset((int)value);
+        }
     }
 }
 
-void GameControllerMIDIPlugin::run(const float**, float**, uint32_t, const MidiEvent* midiEvents, uint32_t midiEventCount) {
+void GameControllerMIDIPlugin::run(
+    const float**,
+    float**,
+    uint32_t,
+    const MidiEvent* midiEvents,
+    uint32_t midiEventCount
+) {
+    // 0. Check for parameter changes from within the dispatcher (e.g. D-Pad octave change)
+    if (fDispatcher && fDispatcher->getAndResetOctaveDirty()) {
+        if (auto mapper = fDispatcher->getMapper()) {
+            requestParameterValueChange(
+                kParamOctave,
+                (float)mapper->getOctaveOffset()
+            );
+        }
+    }
+
+    // 1. Process host MIDI and add to UI history
     for (uint32_t i = 0; i < midiEventCount; ++i) {
         if (midiEvents[i].size <= 4) {
             uint32_t historyIdx = fMidiHistoryIndex.load(std::memory_order_relaxed);
             historyIdx = (historyIdx + 1) % kMidiHistorySize;
-            fMidiHistory[historyIdx].size = midiEvents[i].size;
-            std::memcpy(fMidiHistory[historyIdx].data, midiEvents[i].data, midiEvents[i].size);
+            fMidiHistory[historyIdx].store(packMidi(midiEvents[i]), std::memory_order_relaxed);
             fMidiHistoryIndex.store(historyIdx, std::memory_order_relaxed);
         }
         writeMidiEvent(midiEvents[i]);
     }
 
-    // Drain our internal queue
-    GCMidi::RawMidi rawEv;
-    while (fMidiQueue.pop(rawEv)) {
-        MidiEvent ev;
-        ev.frame = 0;
-        ev.size = rawEv.size;
-        ev.dataExt = nullptr;
-        std::memcpy(ev.data, rawEv.data, ev.size);
+    // 2. Poll MIDI from dispatcher (generated by SDL thread)
+    if (fDispatcher) {
+        GCMidi::RawMidi rawEv;
+        while (fDispatcher->popMidi(rawEv)) {
+            MidiEvent ev;
+            ev.frame = 0;
+            ev.size = rawEv.size;
+            ev.dataExt = nullptr;
+            std::memcpy(ev.data, rawEv.data, ev.size);
 
-        uint32_t historyIdx = fMidiHistoryIndex.load(std::memory_order_relaxed);
-        historyIdx = (historyIdx + 1) % kMidiHistorySize;
-        fMidiHistory[historyIdx].size = ev.size;
-        std::memcpy(fMidiHistory[historyIdx].data, ev.data, ev.size);
-        fMidiHistoryIndex.store(historyIdx, std::memory_order_relaxed);
+            // Add to UI history
+            uint32_t historyIdx = fMidiHistoryIndex.load(std::memory_order_relaxed);
+            historyIdx = (historyIdx + 1) % kMidiHistorySize;
+            fMidiHistory[historyIdx].store(packMidi(ev), std::memory_order_relaxed);
+            fMidiHistoryIndex.store(historyIdx, std::memory_order_relaxed);
 
-        writeMidiEvent(ev);
+            writeMidiEvent(ev);
+        }
     }
 }
 
