@@ -14,9 +14,6 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <cstdio>
-#include <cstring>
-
 #include "DistrhoPluginInfo.h"
 #include "DistrhoUI.hpp"
 #include "Plugin.hpp"
@@ -26,7 +23,7 @@ START_NAMESPACE_DISTRHO
 class GameControllerMIDIUI : public UI {
 public:
     GameControllerMIDIUI()
-        : UI(400, 350) {
+        : UI(400, 200) {
     }
 
 protected:
@@ -101,53 +98,6 @@ protected:
         ImGui::Dummy(ImVec2(0, 20));
         ImGui::Text("RB (Shift): %s", dispatcher.getButtonState(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) ? "PRESSED" : "released");
         ImGui::EndGroup();
-
-        ImGui::Separator();
-        ImGui::Text("Last MIDI Messages:");
-        ImGui::BeginChild("MidiList", ImVec2(0, 150), true);
-
-        const uint32_t head = plugin->fMidiHistoryIndex.load();
-        for (uint32_t i = 0; i < GameControllerMIDIPlugin::kMidiHistorySize; ++i) {
-            const uint32_t idx = (head + GameControllerMIDIPlugin::kMidiHistorySize - i) % GameControllerMIDIPlugin::kMidiHistorySize;
-            const uint64_t packed = plugin->fMidiHistory[idx].load(std::memory_order_relaxed);
-
-            if (packed > 0) {
-                uint8_t size = packed & 0xFF;
-                uint8_t data[4];
-                data[0] = (packed >> 8) & 0xFF;
-                data[1] = (packed >> 16) & 0xFF;
-                data[2] = (packed >> 24) & 0xFF;
-                data[3] = (packed >> 32) & 0xFF;
-
-                uint8_t status = data[0] & 0xF0;
-
-                if (status == 0x90 && size >= 3 && data[2] > 0) {
-                    int note = data[1];
-                    const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-                    ImGui::TextColored(ImVec4(0, 1, 0, 1), "Note On:  %3d (%s%d) Vel: %d", note, noteNames[note % 12], (note / 12) - 1, data[2]);
-                }
-                else if ((status == 0x80 && size >= 3) || (status == 0x90 && size >= 3 && data[2] == 0)) {
-                    int note = data[1];
-                    const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "Note Off: %3d (%s%d)", note, noteNames[note % 12], (note / 12) - 1);
-                }
-                else {
-                    if (size == 1) {
-                        ImGui::Text("[%02X]", data[0]);
-                    }
-                    else if (size == 2) {
-                        ImGui::Text("[%02X %02X]", data[0], data[1]);
-                    }
-                    else if (size == 3) {
-                        ImGui::Text("[%02X %02X %02X]", data[0], data[1], data[2]);
-                    }
-                    else if (size == 4) {
-                        ImGui::Text("[%02X %02X %02X %02X]", data[0], data[1], data[2], data[3]);
-                    }
-                }
-            }
-        }
-        ImGui::EndChild();
 
         ImGui::End();
         repaint();  // Force repaint to see changes

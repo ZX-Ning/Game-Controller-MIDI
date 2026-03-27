@@ -2,7 +2,7 @@
 
 This document provides a technical overview of the `GameControllerMIDI` project, designed to assist both human engineers and AI agents in understanding and extending this audio plugin framework.
 
-## NOTE FOR AI AGENT
+## NOTES FOR AI AGENT
 **Follow the best practice of modern C++ (C++ 23) and real time audio application, and ensure high readability and maintainability of the codebase.**
 
 ## Project Overview
@@ -72,7 +72,7 @@ Pure business logic. Takes raw controller button and axis states as input and ou
 The DPF Plugin entry point. It owns an `EventDispatcher` and handles the DPF lifecycle. In its `run()` loop, it pops MIDI events from the dispatcher and passes them to the host.
 
 ### 5. `GameControllerMIDIUI` (The Observer)
-Builds the UI using Dear ImGui. It safely reads state (like connection status, button states, and MIDI history) via the Plugin's dispatcher to render visual feedback.
+Builds the UI using Dear ImGui. It safely reads state (like connection status and button states) via the Plugin's dispatcher to render visual feedback.
 
 ## Extension Guide for Agents
 
@@ -97,4 +97,3 @@ Builds the UI using Dear ImGui. It safely reads state (like connection status, b
 
 ## Reference
 Reference code: [dear-plugins](https://github.com/DISTRHO/dear-plugins)
-

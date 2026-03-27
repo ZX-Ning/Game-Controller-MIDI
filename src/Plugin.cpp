@@ -4,34 +4,15 @@
 
 #include "Core/SdlManager.hpp"
 
-namespace {
-
-uint64_t packMidi(const MidiEvent& ev) {
-    if (ev.size > 4) {
-        return 0;
-    }
-    uint64_t packed = ev.size;
-    for (uint32_t i = 0; i < ev.size; ++i) {
-        packed |= (static_cast<uint64_t>(ev.data[i]) << (8 * (i + 1)));
-    }
-    return packed;
-}
-
-}  // namespace
-
 START_NAMESPACE_DISTRHO
 
 std::atomic<int> GameControllerMIDIPlugin::sInstanceCount(0);
 
 GameControllerMIDIPlugin::GameControllerMIDIPlugin()
-    : Plugin(kParamCount, 0, 0),
-      fMidiHistoryIndex(0) {
+    : Plugin(kParamCount, 0, 0) {
     int count = ++sInstanceCount;
     if (count > 1) {
-        d_stderr2("WARNING: Multiple GameControllerMIDI instances detected (%d)! This plugin is designed for a single instance only.", count);
-    }
-    for (uint32_t i = 0; i < kMidiHistorySize; ++i) {
-        fMidiHistory[i].store(0, std::memory_order_relaxed);
+        d_stderr2("WARNING: Multiple Plugin instances detected (%d)! This plugin is designed for a single instance only.", count);
     }
     // Create the dispatcher (owned by this plugin)
     fDispatcher = std::make_unique<GCMidi::EventDispatcher>();
@@ -90,14 +71,8 @@ void GameControllerMIDIPlugin::run(
         }
     }
 
-    // 1. Process host MIDI and add to UI history
+    // 1. Process host MIDI
     for (uint32_t i = 0; i < midiEventCount; ++i) {
-        if (midiEvents[i].size <= 4) {
-            uint32_t historyIdx = fMidiHistoryIndex.load(std::memory_order_relaxed);
-            historyIdx = (historyIdx + 1) % kMidiHistorySize;
-            fMidiHistory[historyIdx].store(packMidi(midiEvents[i]), std::memory_order_relaxed);
-            fMidiHistoryIndex.store(historyIdx, std::memory_order_relaxed);
-        }
         writeMidiEvent(midiEvents[i]);
     }
 
@@ -110,12 +85,6 @@ void GameControllerMIDIPlugin::run(
             ev.size = rawEv.size;
             ev.dataExt = nullptr;
             std::memcpy(ev.data, rawEv.data, ev.size);
-
-            // Add to UI history
-            uint32_t historyIdx = fMidiHistoryIndex.load(std::memory_order_relaxed);
-            historyIdx = (historyIdx + 1) % kMidiHistorySize;
-            fMidiHistory[historyIdx].store(packMidi(ev), std::memory_order_relaxed);
-            fMidiHistoryIndex.store(historyIdx, std::memory_order_relaxed);
 
             writeMidiEvent(ev);
         }

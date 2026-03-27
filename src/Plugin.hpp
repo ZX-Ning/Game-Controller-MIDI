@@ -62,11 +62,6 @@ public:
     // Core logic hub
     std::unique_ptr<GCMidi::EventDispatcher> fDispatcher;
 
-    // UI feedback history (DSP side)
-    static const uint32_t kMidiHistorySize = 128;
-    std::atomic<uint64_t> fMidiHistory[kMidiHistorySize];
-    std::atomic<uint32_t> fMidiHistoryIndex;
-
 private:
     static std::atomic<int> sInstanceCount;
 
