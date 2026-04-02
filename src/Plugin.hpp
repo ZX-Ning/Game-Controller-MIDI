@@ -30,13 +30,13 @@ protected:
         return "Game controller to MIDI plugin";
     }
     const char* getMaker() const override {
-        return "DISTRHO";
+        return "ZX-NING";
     }
     const char* getHomePage() const override {
-        return "https://github.com/DISTRHO/DPF";
+        return "https://github.com/zx-ning/GameControllerMIDI";
     }
     const char* getLicense() const override {
-        return "ISC";
+        return "MIT";
     }
     uint32_t getVersion() const override {
         return d_version(1, 0, 0);

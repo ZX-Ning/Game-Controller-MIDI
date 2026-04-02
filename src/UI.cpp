@@ -58,7 +58,7 @@ protected:
                 ImGui::SameLine();
                 ImGui::Text("Octave: %+d", mapper->getOctaveOffset());
                 ImGui::SameLine();
-                ImGui::TextDisabled("(D-Pad L/R)");
+                ImGui::TextDisabled("(D-Pad Up/Down)");
             }
         }
         else {

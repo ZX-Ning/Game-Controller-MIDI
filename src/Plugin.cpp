@@ -3,6 +3,10 @@
 #include <cstring>
 
 #include "Core/SdlManager.hpp"
+#include "Logic/FlexibleMapper.hpp"
+
+// Include the generated preset header
+#include "preset_c_major_chords.hpp"
 
 START_NAMESPACE_DISTRHO
 
@@ -16,6 +20,16 @@ GameControllerMIDIPlugin::GameControllerMIDIPlugin()
     }
     // Create the dispatcher (owned by this plugin)
     fDispatcher = std::make_unique<GCMidi::EventDispatcher>();
+
+    // Initial mapper configuration
+    auto mapper = std::make_unique<GCMidi::FlexibleMapper>();
+    if (mapper->loadPreset(preset_c_major_chords_data, preset_c_major_chords_size)) {
+        fDispatcher->setMapper(std::move(mapper));
+    }
+    else {
+        d_stderr2("ERROR: Failed to load preset 'c_major_chords'. Plugin will not produce MIDI output.");
+    }
+
     // Register with the global SDL pump
     GCMidi::SdlManager::getInstance().setEventHandler(fDispatcher.get());
 }
@@ -40,7 +54,7 @@ void GameControllerMIDIPlugin::initParameter(uint32_t index, Parameter& paramete
 float GameControllerMIDIPlugin::getParameterValue(uint32_t index) const {
     if (index == kParamOctave && fDispatcher) {
         if (auto mapper = fDispatcher->getMapper()) {
-            return (float)mapper->getOctaveOffset();
+            return static_cast<float>(mapper->getOctaveOffset());
         }
     }
     return 0.0f;
@@ -49,7 +63,7 @@ float GameControllerMIDIPlugin::getParameterValue(uint32_t index) const {
 void GameControllerMIDIPlugin::setParameterValue(uint32_t index, float value) {
     if (index == kParamOctave && fDispatcher) {
         if (auto mapper = fDispatcher->getMapper()) {
-            mapper->setOctaveOffset((int)value);
+            mapper->setOctaveOffset(static_cast<int>(value));
         }
     }
 }
@@ -66,7 +80,7 @@ void GameControllerMIDIPlugin::run(
         if (auto mapper = fDispatcher->getMapper()) {
             requestParameterValueChange(
                 kParamOctave,
-                (float)mapper->getOctaveOffset()
+                static_cast<float>(mapper->getOctaveOffset())
             );
         }
     }

@@ -1,6 +1,8 @@
 #ifndef ICONTROLLER_EVENT_HANDLER_HPP_INCLUDED
 #define ICONTROLLER_EVENT_HANDLER_HPP_INCLUDED
 
+#include <SDL.h>
+
 #include <cstdint>
 
 namespace GCMidi {
@@ -14,6 +16,11 @@ public:
     virtual void onControllerDisconnected() = 0;
     virtual void onControllerButton(uint8_t button, bool pressed, bool shiftState) = 0;
     virtual void onControllerAxis(uint8_t axis, int16_t value, bool shiftState) = 0;
+
+    // Get the button index used as shift modifier
+    virtual uint8_t getShiftButton() const {
+        return SDL_CONTROLLER_BUTTON_RIGHTSHOULDER;  // Default
+    }
 };
 
 }  // namespace GCMidi

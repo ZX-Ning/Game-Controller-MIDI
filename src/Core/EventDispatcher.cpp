@@ -1,5 +1,4 @@
 #include "EventDispatcher.hpp"
-#include "Logic/MajorScaleMapper.hpp"
 
 namespace GCMidi {
 
@@ -10,8 +9,6 @@ EventDispatcher::EventDispatcher()
     for (int i = 0; i < SDL_CONTROLLER_BUTTON_MAX; ++i) {
         fButtonStates[i].store(false, std::memory_order_relaxed);
     }
-
-    fMapper = std::make_unique<MajorScaleMapper>();
 }
 
 EventDispatcher::~EventDispatcher() {
@@ -57,6 +54,13 @@ void EventDispatcher::onControllerAxis(uint8_t axis, int16_t value, bool shiftSt
     }
 }
 
+uint8_t EventDispatcher::getShiftButton() const {
+    if (fMapper) {
+        return fMapper->getShiftButton();
+    }
+    return SDL_CONTROLLER_BUTTON_RIGHTSHOULDER;
+}
+
 bool EventDispatcher::popMidi(RawMidi& outEv) {
     return fMidiQueue.pop(outEv);
 }
@@ -77,6 +81,11 @@ bool EventDispatcher::getButtonState(uint8_t button) const {
 
 IMidiMapper* EventDispatcher::getMapper() {
     return fMapper.get();
+}
+
+void EventDispatcher::setMapper(std::unique_ptr<IMidiMapper> mapper) {
+    std::lock_guard<std::mutex> lock(fStateMutex);
+    fMapper = std::move(mapper);
 }
 
 bool EventDispatcher::getAndResetOctaveDirty() {

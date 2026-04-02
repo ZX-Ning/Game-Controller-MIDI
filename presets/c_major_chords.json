@@ -1,0 +1,20 @@
+{
+    "name": "C Major Chords",
+    "channel": 0,
+    "baseOctaveOffset": 0,
+    "shiftButtonName": "rightshoulder",
+    "buttons": {
+        "a": { "mode": "chord", "note": 60, "velocity": 100, "intervals": [0, 4, 7] },
+        "b": { "mode": "chord", "note": 62, "velocity": 100, "intervals": [0, 3, 7] },
+        "x": { "mode": "chord", "note": 64, "velocity": 100, "intervals": [0, 3, 7] },
+        "y": { "mode": "chord", "note": 65, "velocity": 100, "intervals": [0, 4, 7] },
+        "leftshoulder": { "mode": "chord", "note": 67, "velocity": 100, "intervals": [0, 4, 7] },
+        "rightshoulder": { "mode": "chord", "note": 69, "velocity": 100, "intervals": [0, 3, 7] },
+        "dpad_up": { "mode": "octave_up" },
+        "dpad_down": { "mode": "octave_down" }
+    },
+    "axes": {
+        "leftx": { "mode": "cc", "cc": 1, "bipolar": true, "deadzone": 0.15 },
+        "triggerright": { "mode": "cc", "cc": 11, "bipolar": false, "deadzone": 0.05 }
+    }
+}

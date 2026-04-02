@@ -1,6 +1,8 @@
 #ifndef IMIDI_MAPPER_HPP_INCLUDED
 #define IMIDI_MAPPER_HPP_INCLUDED
 
+#include <SDL.h>
+
 #include <boost/lockfree/queue.hpp>
 #include <cstdint>
 
@@ -29,6 +31,11 @@ public:
 
     // Set octave offset (e.g. from plugin parameters)
     virtual void setOctaveOffset(int offset) = 0;
+
+    // Get the button index used as shift modifier (default: right shoulder)
+    virtual uint8_t getShiftButton() const {
+        return SDL_CONTROLLER_BUTTON_RIGHTSHOULDER;
+    }
 };
 
 }  // namespace GCMidi

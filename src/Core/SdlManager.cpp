@@ -2,8 +2,6 @@
 
 #include <chrono>
 
-#include "DistrhoUtils.hpp"
-
 namespace GCMidi {
 
 SdlManager& SdlManager::getInstance() {
@@ -154,7 +152,8 @@ void SdlManager::handleControllerButton(const SDL_ControllerButtonEvent& event) 
 
     bool down = (event.type == SDL_CONTROLLERBUTTONDOWN);
     uint8_t button = event.button;
-    bool shift = SDL_GameControllerGetButton(fController, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) == 1;
+    uint8_t shiftBtn = fHandler->getShiftButton();
+    bool shift = SDL_GameControllerGetButton(fController, static_cast<SDL_GameControllerButton>(shiftBtn)) == 1;
     fHandler->onControllerButton(button, down, shift);
 }
 
@@ -165,7 +164,8 @@ void SdlManager::handleControllerAxis(const SDL_ControllerAxisEvent& event) {
 
     uint8_t axis = event.axis;
     int16_t value = event.value;
-    bool shift = SDL_GameControllerGetButton(fController, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) == 1;
+    uint8_t shiftBtn = fHandler->getShiftButton();
+    bool shift = SDL_GameControllerGetButton(fController, static_cast<SDL_GameControllerButton>(shiftBtn)) == 1;
     fHandler->onControllerAxis(axis, value, shift);
 }
 
