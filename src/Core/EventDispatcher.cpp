@@ -3,7 +3,7 @@
 namespace GCMidi {
 
 EventDispatcher::EventDispatcher()
-    : fMidiQueue(256),
+    : fMidiQueue(1024),  // Increased from 256 to handle high-frequency axis events
       fControllerConnected(false),
       fOctaveDirty(false) {
     for (int i = 0; i < SDL_CONTROLLER_BUTTON_MAX; ++i) {

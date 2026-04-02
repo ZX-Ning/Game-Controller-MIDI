@@ -38,7 +38,7 @@ protected:
         ImGui::Text("Game Controller MIDI");
         ImGui::Separator();
 
-        GameControllerMIDIPlugin* const plugin = (GameControllerMIDIPlugin*)getPluginInstancePointer();
+        auto* plugin = static_cast<GameControllerMIDIPlugin*>(getPluginInstancePointer());
         if (!plugin || !plugin->fDispatcher) {
             ImGui::TextColored(ImVec4(1, 0, 0, 1), "Error: Plugin or Dispatcher not found");
             ImGui::End();
@@ -100,7 +100,8 @@ protected:
         ImGui::EndGroup();
 
         ImGui::End();
-        repaint();  // Force repaint to see changes
+        // Removed unconditional repaint() to prevent infinite redraw loop
+        // UI will update via uiIdle() or when parameters change
     }
 
     void parameterChanged(uint32_t, float) override {

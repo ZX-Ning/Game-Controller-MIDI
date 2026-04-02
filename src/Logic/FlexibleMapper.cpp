@@ -300,21 +300,32 @@ uint8_t FlexibleMapper::getShiftButton() const {
 }
 
 void FlexibleMapper::handleNoteMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, MidiQueue& queue) {
-    uint8_t note = clampNote(config.noteOrCC + fOctaveOffset * 12);
-
-    RawMidi midi{};
-    midi.data[0] = (pressed ? 0x90 : 0x80) | (fPreset.channel & 0x0F);
-    midi.data[1] = note;
-    midi.data[2] = pressed ? config.velocity : 0;
-    midi.size = 3;
-    queue.push(midi);
-
     if (pressed) {
+        // Calculate note and store it for later Note Off
+        uint8_t note = clampNote(config.noteOrCC + fOctaveOffset * 12);
+
         fActiveNotes[button].count = 1;
         fActiveNotes[button].notes[0] = note;
+
+        RawMidi midi{};
+        midi.data[0] = 0x90 | (fPreset.channel & 0x0F);  // Note On
+        midi.data[1] = note;
+        midi.data[2] = config.velocity;
+        midi.size = 3;
+        queue.push(midi);
     }
     else {
-        fActiveNotes[button].count = 0;
+        // Send Note Off for the stored note, not recalculated one
+        if (fActiveNotes[button].count > 0) {
+            RawMidi midi{};
+            midi.data[0] = 0x80 | (fPreset.channel & 0x0F);  // Note Off
+            midi.data[1] = fActiveNotes[button].notes[0];
+            midi.data[2] = 0;
+            midi.size = 3;
+            queue.push(midi);
+
+            fActiveNotes[button].count = 0;
+        }
     }
 }
 
