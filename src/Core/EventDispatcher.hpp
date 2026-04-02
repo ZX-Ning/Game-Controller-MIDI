@@ -28,6 +28,7 @@ public:
     void onControllerAxis(uint8_t axis, int16_t value, bool shiftState) override;
 
     uint8_t getShiftButton() const override;
+    uint8_t getShiftButtonForButton(uint8_t button) const override;
 
     // Called by DSP Thread
     bool popMidi(RawMidi& outEv);

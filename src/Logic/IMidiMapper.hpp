@@ -36,6 +36,13 @@ public:
     virtual uint8_t getShiftButton() const {
         return SDL_CONTROLLER_BUTTON_RIGHTSHOULDER;
     }
+
+    // Get the shift button for a specific button (per-button shift support)
+    // Default implementation: fall back to global shift
+    virtual uint8_t getShiftButtonForButton(uint8_t button) const {
+        (void)button;  // Suppress unused parameter warning
+        return getShiftButton();
+    }
 };
 
 }  // namespace GCMidi

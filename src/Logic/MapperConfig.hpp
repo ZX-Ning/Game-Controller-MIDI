@@ -37,6 +37,11 @@ struct ButtonConfig {
     uint8_t velocity = 100;                                    // Note velocity (0-127)
     uint8_t intervalCount = 0;                                 // Number of valid intervals in chordIntervals
     std::array<int8_t, MAX_CHORD_INTERVALS> chordIntervals{};  // Semitone offsets from base note
+
+    // Per-button shift key override
+    // -1 = use global shift from MapperPreset.shiftButton
+    // 0-14 = specific SDL_GameControllerButton index
+    int8_t shiftButton = -1;
 };
 
 struct AxisConfig {

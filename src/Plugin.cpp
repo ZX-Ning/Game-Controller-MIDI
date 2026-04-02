@@ -6,7 +6,7 @@
 #include "Logic/FlexibleMapper.hpp"
 
 // Include the generated preset header
-#include "preset_c_major_chords.hpp"
+#include "preset_c_major_scale_chords.hpp"
 
 START_NAMESPACE_DISTRHO
 
@@ -23,11 +23,11 @@ GameControllerMIDIPlugin::GameControllerMIDIPlugin()
 
     // Initial mapper configuration
     auto mapper = std::make_unique<GCMidi::FlexibleMapper>();
-    if (mapper->loadPreset(preset_c_major_chords_data, preset_c_major_chords_size)) {
+    if (mapper->loadPreset(preset_c_major_scale_chords_data, preset_c_major_scale_chords_size)) {
         fDispatcher->setMapper(std::move(mapper));
     }
     else {
-        d_stderr2("ERROR: Failed to load preset 'c_major_chords'. Plugin will not produce MIDI output.");
+        d_stderr2("ERROR: Failed to load preset 'c_major_scale_chords'. Plugin will not produce MIDI output.");
     }
 
     // Register with the global SDL pump

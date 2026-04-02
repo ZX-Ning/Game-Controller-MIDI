@@ -205,6 +205,24 @@ bool FlexibleMapper::loadPreset(const uint8_t* jsonData, size_t jsonSize) {
             }
         }
 
+        // Parse per-button shift key overrides
+        if (j.contains("buttonShiftKeys")) {
+            for (const auto& [key, value] : j["buttonShiftKeys"].items()) {
+                int btnIdx = buttonNameToIndex(key);
+                if (btnIdx < 0 || btnIdx >= SDL_CONTROLLER_BUTTON_MAX) {
+                    continue;  // Skip invalid button names
+                }
+
+                int shiftIdx = buttonNameToIndex(value.get<std::string>());
+                if (shiftIdx >= 0 && shiftIdx < SDL_CONTROLLER_BUTTON_MAX) {
+                    // Set shift button override for both normal and shift configs
+                    // This ensures consistency regardless of shift state
+                    fPreset.buttons[btnIdx].shiftButton = static_cast<int8_t>(shiftIdx);
+                    fPreset.shiftButtons[btnIdx].shiftButton = static_cast<int8_t>(shiftIdx);
+                }
+            }
+        }
+
         return true;
     }
     catch (const json::exception&) {
@@ -296,6 +314,20 @@ void FlexibleMapper::setOctaveOffset(int offset) {
 }
 
 uint8_t FlexibleMapper::getShiftButton() const {
+    return fPreset.shiftButton;
+}
+
+uint8_t FlexibleMapper::getShiftButtonForButton(uint8_t button) const {
+    if (button >= SDL_CONTROLLER_BUTTON_MAX) {
+        return fPreset.shiftButton;
+    }
+
+    // Check if this button has a specific shift key override
+    if (fPreset.buttons[button].shiftButton >= 0) {
+        return static_cast<uint8_t>(fPreset.buttons[button].shiftButton);
+    }
+
+    // Fallback to global shift button
     return fPreset.shiftButton;
 }
 

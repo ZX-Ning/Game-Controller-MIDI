@@ -61,6 +61,13 @@ uint8_t EventDispatcher::getShiftButton() const {
     return SDL_CONTROLLER_BUTTON_RIGHTSHOULDER;
 }
 
+uint8_t EventDispatcher::getShiftButtonForButton(uint8_t button) const {
+    if (fMapper) {
+        return fMapper->getShiftButtonForButton(button);
+    }
+    return SDL_CONTROLLER_BUTTON_RIGHTSHOULDER;
+}
+
 bool EventDispatcher::popMidi(RawMidi& outEv) {
     return fMidiQueue.pop(outEv);
 }

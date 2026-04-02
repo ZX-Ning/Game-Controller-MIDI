@@ -30,6 +30,7 @@ public:
     int getOctaveOffset() const override;
     void setOctaveOffset(int offset) override;
     uint8_t getShiftButton() const override;
+    uint8_t getShiftButtonForButton(uint8_t button) const override;
 
 private:
     MapperConfig::MapperPreset fPreset{};

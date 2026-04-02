@@ -152,7 +152,7 @@ void SdlManager::handleControllerButton(const SDL_ControllerButtonEvent& event) 
 
     bool down = (event.type == SDL_CONTROLLERBUTTONDOWN);
     uint8_t button = event.button;
-    uint8_t shiftBtn = fHandler->getShiftButton();
+    uint8_t shiftBtn = fHandler->getShiftButtonForButton(button);
     bool shift = SDL_GameControllerGetButton(fController, static_cast<SDL_GameControllerButton>(shiftBtn)) == 1;
     fHandler->onControllerButton(button, down, shift);
 }

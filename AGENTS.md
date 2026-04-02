@@ -174,6 +174,7 @@ Pure business logic interface. Takes raw controller button and axis states as in
 - Supports multiple button modes: single notes, chords, CC (momentary/toggle), octave shifts
 - Supports multiple axis modes: CC, pitch bend, aftertouch
 - Configurable shift button (defaults to right shoulder)
+- **Per-button shift key support**: Assign different shift modifiers to different buttons via `buttonShiftKeys` in JSON
 - Real-time safe: uses fixed-size `std::array` for all collections
 - Axis value caching to reduce redundant MIDI traffic
 
@@ -261,4 +262,39 @@ triggerleft, triggerright       -> SDL_CONTROLLER_AXIS_TRIGGERLEFT/TRIGGERRIGHT
 
 ## Reference
 - DPF Framework: [dear-plugins](https://github.com/DISTRHO/dear-plugins)
-- Implementation Plans: `.opencode/plans/flexible_mapper_implementation.md` and `flexiblemapper_improvements.md`
+- Implementation Plans: `.opencode/plans/flexible_mapper_implementation.md`, `flexiblemapper_improvements.md` and `multi_shift_key_support.md`
+
+### Per-Button Shift Key Support
+
+The `FlexibleMapper` supports assigning different shift keys to different buttons or button groups, enabling more ergonomic and expressive controller mappings.
+
+#### Configuration
+
+In your JSON preset, use the `buttonShiftKeys` object to specify which shift key each button should use:
+
+```json
+{
+    "shiftButtonName": "rightshoulder",  // Global default
+    
+    "buttonShiftKeys": {
+        "dpad_up": "leftshoulder",
+        "dpad_down": "leftshoulder",
+        "dpad_left": "leftshoulder",
+        "dpad_right": "leftshoulder"
+    }
+}
+```
+
+#### Behavior
+
+- Buttons **not listed** in `buttonShiftKeys` use the global `shiftButton`
+- Each button can have its own independent shift key
+- Axes currently use the global shift button only (per-axis shift support can be added if needed)
+
+#### Example Use Case
+
+This feature enables configurations like:
+- **Right shoulder + ABXY** → Scale notes (C, D, E, F, G, A, B, C+8ve)
+- **Left shoulder + D-pad** → Diatonic chords (I, IV, V, vi, iii, ii, vii°, III)
+
+Both shift keys are active simultaneously, allowing seamless transitions between melody and harmony.
