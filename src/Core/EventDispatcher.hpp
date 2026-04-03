@@ -15,6 +15,9 @@
 
 namespace GCMidi {
 
+// Trigger threshold for octave control (50% of max trigger value)
+inline constexpr int16_t TRIGGER_THRESHOLD = 16384;
+
 class EventDispatcher : public IControllerEventHandler {
 public:
     EventDispatcher();
@@ -51,14 +54,22 @@ public:
 
     bool getAndResetOctaveDirty();
 
+    // Trigger octave offset for melody transposition
+    int8_t getTriggerOctaveOffset() const;
+    void setTriggerOctaveOffset(int8_t offset);
+
 private:
     std::unique_ptr<IMidiMapper> fMapper;
     boost::lockfree::queue<RawMidi> fMidiQueue;
 
-    // UxeI State variables
+    // UI State variables
     std::atomic<bool> fControllerConnected;
     std::string fControllerName;
     std::atomic<bool> fButtonStates[SDL_CONTROLLER_BUTTON_MAX];
+
+    std::atomic<int8_t> fTriggerOctaveOffset{0};
+    bool fLeftTriggerPressed = false;
+    bool fRightTriggerPressed = false;
 
     std::atomic<bool> fOctaveDirty;
 

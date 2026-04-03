@@ -20,13 +20,14 @@ set(IMGUI_WIDGET_SRC
 include(cmake/EmbedPresets.cmake)
 
 dpf_add_plugin(GameControllerMIDI
-    TARGETS vst2 vst3 clap
+    TARGETS vst2 vst3 clap 
     UI_TYPE opengl
     FILES_DSP
         src/Plugin.cpp
         src/Core/SdlManager.cpp
         src/Core/EventDispatcher.cpp
         src/Logic/FlexibleMapper.cpp
+        src/Logic/MapperSerialization.cpp
     FILES_UI
         src/UI.cpp
         ${IMGUI_WIDGET_SRC}

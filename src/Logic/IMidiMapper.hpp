@@ -32,6 +32,14 @@ public:
     // Set octave offset (e.g. from plugin parameters)
     virtual void setOctaveOffset(int offset) = 0;
 
+    // Trigger octave offset (LT/RT cumulative)
+    virtual int8_t getTriggerOctaveOffset() const {
+        return 0;
+    }
+    virtual void setTriggerOctaveOffset(int8_t offset) {
+        (void)offset;
+    }
+
     // Get the button index used as shift modifier (default: right shoulder)
     virtual uint8_t getShiftButton() const {
         return SDL_CONTROLLER_BUTTON_RIGHTSHOULDER;

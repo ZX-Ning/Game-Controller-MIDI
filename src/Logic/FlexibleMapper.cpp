@@ -10,224 +10,31 @@ using json = nlohmann::json;
 
 namespace GCMidi {
 
-namespace {
-// Button name to SDL constant mapping
-int buttonNameToIndex(std::string_view name) {
-    if (name == "a") {
-        return SDL_CONTROLLER_BUTTON_A;
-    }
-    if (name == "b") {
-        return SDL_CONTROLLER_BUTTON_B;
-    }
-    if (name == "x") {
-        return SDL_CONTROLLER_BUTTON_X;
-    }
-    if (name == "y") {
-        return SDL_CONTROLLER_BUTTON_Y;
-    }
-    if (name == "back") {
-        return SDL_CONTROLLER_BUTTON_BACK;
-    }
-    if (name == "guide") {
-        return SDL_CONTROLLER_BUTTON_GUIDE;
-    }
-    if (name == "start") {
-        return SDL_CONTROLLER_BUTTON_START;
-    }
-    if (name == "leftstick") {
-        return SDL_CONTROLLER_BUTTON_LEFTSTICK;
-    }
-    if (name == "rightstick") {
-        return SDL_CONTROLLER_BUTTON_RIGHTSTICK;
-    }
-    if (name == "leftshoulder") {
-        return SDL_CONTROLLER_BUTTON_LEFTSHOULDER;
-    }
-    if (name == "rightshoulder") {
-        return SDL_CONTROLLER_BUTTON_RIGHTSHOULDER;
-    }
-    if (name == "dpad_up") {
-        return SDL_CONTROLLER_BUTTON_DPAD_UP;
-    }
-    if (name == "dpad_down") {
-        return SDL_CONTROLLER_BUTTON_DPAD_DOWN;
-    }
-    if (name == "dpad_left") {
-        return SDL_CONTROLLER_BUTTON_DPAD_LEFT;
-    }
-    if (name == "dpad_right") {
-        return SDL_CONTROLLER_BUTTON_DPAD_RIGHT;
-    }
-    return -1;
-}
-
-int axisNameToIndex(std::string_view name) {
-    if (name == "leftx") {
-        return SDL_CONTROLLER_AXIS_LEFTX;
-    }
-    if (name == "lefty") {
-        return SDL_CONTROLLER_AXIS_LEFTY;
-    }
-    if (name == "rightx") {
-        return SDL_CONTROLLER_AXIS_RIGHTX;
-    }
-    if (name == "righty") {
-        return SDL_CONTROLLER_AXIS_RIGHTY;
-    }
-    if (name == "triggerleft") {
-        return SDL_CONTROLLER_AXIS_TRIGGERLEFT;
-    }
-    if (name == "triggerright") {
-        return SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
-    }
-    return -1;
-}
-
-MapperConfig::ButtonMode parseButtonMode(std::string_view mode) {
-    if (mode == "note") {
-        return MapperConfig::ButtonMode::Note;
-    }
-    if (mode == "chord") {
-        return MapperConfig::ButtonMode::Chord;
-    }
-    if (mode == "cc_momentary") {
-        return MapperConfig::ButtonMode::CC_Momentary;
-    }
-    if (mode == "cc_toggle") {
-        return MapperConfig::ButtonMode::CC_Toggle;
-    }
-    if (mode == "octave_up") {
-        return MapperConfig::ButtonMode::OctaveUp;
-    }
-    if (mode == "octave_down") {
-        return MapperConfig::ButtonMode::OctaveDown;
-    }
-    return MapperConfig::ButtonMode::None;
-}
-
-MapperConfig::AxisMode parseAxisMode(std::string_view mode) {
-    if (mode == "cc") {
-        return MapperConfig::AxisMode::CC;
-    }
-    if (mode == "pitchbend") {
-        return MapperConfig::AxisMode::PitchBend;
-    }
-    if (mode == "aftertouch") {
-        return MapperConfig::AxisMode::Aftertouch;
-    }
-    return MapperConfig::AxisMode::None;
-}
-
-void parseButtonConfig(const json& j, MapperConfig::ButtonConfig& config) {
-    config.mode = parseButtonMode(j.value("mode", "none"));
-    config.noteOrCC = j.value("note", j.value("cc", 60));
-    config.velocity = j.value("velocity", 100);
-
-    if (j.contains("intervals")) {
-        const auto& intervals = j["intervals"];
-        config.intervalCount = std::min(intervals.size(), MapperConfig::MAX_CHORD_INTERVALS);
-        for (size_t i = 0; i < config.intervalCount; ++i) {
-            config.chordIntervals[i] = intervals[i].get<int8_t>();
-        }
-    }
-}
-
-void parseAxisConfig(const json& j, MapperConfig::AxisConfig& config) {
-    config.mode = parseAxisMode(j.value("mode", "none"));
-    config.ccNumber = j.value("cc", 0);
-    config.isBipolar = j.value("bipolar", true);
-    config.isInverted = j.value("inverted", false);
-    config.deadzone = j.value("deadzone", 0.1f);
-}
-}  // anonymous namespace
-
 FlexibleMapper::FlexibleMapper() = default;
 
 bool FlexibleMapper::loadPreset(const uint8_t* jsonData, size_t jsonSize) {
-    try {
-        json j = json::parse(jsonData, jsonData + jsonSize);
-
-        // Parse name
-        std::string name = j.value("name", "Unnamed");
-        std::copy_n(name.begin(), std::min(name.size(), size_t{63}), fPreset.name.begin());
-
-        fPreset.channel = j.value("channel", 0);
-        fPreset.baseOctaveOffset = j.value("baseOctaveOffset", 0);
-        fOctaveOffset = fPreset.baseOctaveOffset;
-
-        fPreset.shiftButton = j.value("shiftButton", static_cast<uint8_t>(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER));
-
-        // Also support string-based button name
-        if (j.contains("shiftButtonName")) {
-            int idx = buttonNameToIndex(j["shiftButtonName"].get<std::string>());
-            if (idx >= 0) {
-                fPreset.shiftButton = static_cast<uint8_t>(idx);
-            }
-        }
-
-        // Parse buttons
-        if (j.contains("buttons")) {
-            for (const auto& [key, value] : j["buttons"].items()) {
-                int idx = buttonNameToIndex(key);
-                if (idx >= 0 && idx < SDL_CONTROLLER_BUTTON_MAX) {
-                    parseButtonConfig(value, fPreset.buttons[idx]);
-                }
-            }
-        }
-
-        // Parse shift buttons
-        if (j.contains("shiftButtons")) {
-            for (const auto& [key, value] : j["shiftButtons"].items()) {
-                int idx = buttonNameToIndex(key);
-                if (idx >= 0 && idx < SDL_CONTROLLER_BUTTON_MAX) {
-                    parseButtonConfig(value, fPreset.shiftButtons[idx]);
-                }
-            }
-        }
-
-        // Parse axes
-        if (j.contains("axes")) {
-            for (const auto& [key, value] : j["axes"].items()) {
-                int idx = axisNameToIndex(key);
-                if (idx >= 0 && idx < SDL_CONTROLLER_AXIS_MAX) {
-                    parseAxisConfig(value, fPreset.axes[idx]);
-                }
-            }
-        }
-
-        // Parse shift axes
-        if (j.contains("shiftAxes")) {
-            for (const auto& [key, value] : j["shiftAxes"].items()) {
-                int idx = axisNameToIndex(key);
-                if (idx >= 0 && idx < SDL_CONTROLLER_AXIS_MAX) {
-                    parseAxisConfig(value, fPreset.shiftAxes[idx]);
-                }
-            }
-        }
-
-        // Parse per-button shift key overrides
-        if (j.contains("buttonShiftKeys")) {
-            for (const auto& [key, value] : j["buttonShiftKeys"].items()) {
-                int btnIdx = buttonNameToIndex(key);
-                if (btnIdx < 0 || btnIdx >= SDL_CONTROLLER_BUTTON_MAX) {
-                    continue;  // Skip invalid button names
-                }
-
-                int shiftIdx = buttonNameToIndex(value.get<std::string>());
-                if (shiftIdx >= 0 && shiftIdx < SDL_CONTROLLER_BUTTON_MAX) {
-                    // Set shift button override for both normal and shift configs
-                    // This ensures consistency regardless of shift state
-                    fPreset.buttons[btnIdx].shiftButton = static_cast<int8_t>(shiftIdx);
-                    fPreset.shiftButtons[btnIdx].shiftButton = static_cast<int8_t>(shiftIdx);
-                }
-            }
-        }
-
+    std::string jsonStr(reinterpret_cast<const char*>(jsonData), jsonSize);
+    if (MapperConfig::deserializePreset(jsonStr, fPreset)) {
+        this->setPreset(fPreset);
         return true;
     }
-    catch (const json::exception&) {
-        return false;
+    return false;
+}
+
+void FlexibleMapper::setPreset(const MapperConfig::MapperPreset& preset) {
+    fPreset = preset;
+
+    // Reset runtime state
+    fOctaveOffset = fPreset.baseOctaveOffset;
+
+    for (auto& notes : fActiveNotes) {
+        notes.count = 0;
     }
+
+    fCCToggleStates.fill(false);
+    fLastAxisCCValues.fill(255);  // Force initial send
+    fLastAxisPitchBendValues.fill(0xFFFF);
+    fLastAxisAftertouchValues.fill(255);
 }
 
 void FlexibleMapper::onButton(uint8_t button, bool pressed, bool shift, MidiQueue& queue) {
@@ -313,6 +120,25 @@ void FlexibleMapper::setOctaveOffset(int offset) {
     fOctaveOffset = static_cast<int8_t>(std::clamp(offset, -4, 4));
 }
 
+int8_t FlexibleMapper::getTriggerOctaveOffset() const {
+    return fTriggerOctaveOffset;
+}
+
+void FlexibleMapper::setTriggerOctaveOffset(int8_t offset) {
+    fTriggerOctaveOffset = std::clamp(offset, int8_t(-4), int8_t(4));
+}
+
+uint8_t FlexibleMapper::applyMelodyOctave(uint8_t baseNote, int8_t triggerOctave) const {
+    int total = baseNote + (fOctaveOffset * 12) + (triggerOctave * 12);
+    return clampNote(total);
+}
+
+uint8_t FlexibleMapper::applyChordOctave(uint8_t baseNote, int8_t chordOctaveOffset) const {
+    // Chords ignore trigger octave, only use base + chord-specific offset
+    int total = baseNote + (fOctaveOffset * 12) + (chordOctaveOffset * 12);
+    return clampNote(total);
+}
+
 uint8_t FlexibleMapper::getShiftButton() const {
     return fPreset.shiftButton;
 }
@@ -334,7 +160,7 @@ uint8_t FlexibleMapper::getShiftButtonForButton(uint8_t button) const {
 void FlexibleMapper::handleNoteMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, MidiQueue& queue) {
     if (pressed) {
         // Calculate note and store it for later Note Off
-        uint8_t note = clampNote(config.noteOrCC + fOctaveOffset * 12);
+        uint8_t note = applyMelodyOctave(config.noteOrCC, fTriggerOctaveOffset);
 
         fActiveNotes[button].count = 1;
         fActiveNotes[button].notes[0] = note;
@@ -366,8 +192,8 @@ void FlexibleMapper::handleChordMode(const MapperConfig::ButtonConfig& config, b
         // Calculate and store all chord notes
         fActiveNotes[button].count = 0;
         for (size_t i = 0; i < config.intervalCount && i < MapperConfig::MAX_ACTIVE_NOTES; ++i) {
-            int note = config.noteOrCC + config.chordIntervals[i] + fOctaveOffset * 12;
-            uint8_t clampedNote = clampNote(note);
+            uint8_t baseNote = config.noteOrCC + config.chordIntervals[i];
+            uint8_t clampedNote = applyChordOctave(baseNote, config.chordOctaveOffset);
 
             fActiveNotes[button].notes[fActiveNotes[button].count++] = clampedNote;
 

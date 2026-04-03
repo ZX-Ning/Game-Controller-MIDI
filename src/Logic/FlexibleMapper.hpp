@@ -24,17 +24,33 @@ public:
     // Load preset from embedded JSON data
     bool loadPreset(const uint8_t* jsonData, size_t jsonSize);
 
+    // Direct preset access for state management
+    const MapperConfig::MapperPreset& getPreset() const {
+        return fPreset;
+    }
+    void setPreset(const MapperConfig::MapperPreset& preset);
+
     // IMidiMapper interface
     void onButton(uint8_t button, bool pressed, bool shift, MidiQueue& queue) override;
     void onAxis(uint8_t axis, int16_t value, bool shift, MidiQueue& queue) override;
     int getOctaveOffset() const override;
     void setOctaveOffset(int offset) override;
+
+    // Trigger octave offset for melody transposition
+    int8_t getTriggerOctaveOffset() const override;
+    void setTriggerOctaveOffset(int8_t offset) override;
+
+    // Distinguish melody from chords in octave application
+    uint8_t applyMelodyOctave(uint8_t baseNote, int8_t triggerOctave) const;
+    uint8_t applyChordOctave(uint8_t baseNote, int8_t chordOctaveOffset) const;
+
     uint8_t getShiftButton() const override;
     uint8_t getShiftButtonForButton(uint8_t button) const override;
 
 private:
     MapperConfig::MapperPreset fPreset{};
     int8_t fOctaveOffset = 0;
+    int8_t fTriggerOctaveOffset = 0;  // Cumulative LT/RT offset
 
     // Track active notes per button for correct NoteOff
     struct ActiveNotes {

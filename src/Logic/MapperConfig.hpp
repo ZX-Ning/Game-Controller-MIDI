@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace MapperConfig {
@@ -20,8 +21,8 @@ enum class ButtonMode : uint8_t {
     Chord,         // Multiple MIDI notes (root + intervals)
     CC_Momentary,  // CC 127 on press, 0 on release
     CC_Toggle,     // CC toggles between 127 and 0
-    OctaveUp,      // Increment octave offset
-    OctaveDown     // Decrement octave offset
+    OctaveUp,      // DEPRECATED: Use trigger octave control instead
+    OctaveDown     // DEPRECATED: Use trigger octave control instead
 };
 
 enum class AxisMode : uint8_t {
@@ -42,6 +43,10 @@ struct ButtonConfig {
     // -1 = use global shift from MapperPreset.shiftButton
     // 0-14 = specific SDL_GameControllerButton index
     int8_t shiftButton = -1;
+
+    // Per-chord octave offset (added to base octave)
+    // Only affects Chord mode, ignored for other modes
+    int8_t chordOctaveOffset = 0;  // Range: -4 to +4
 };
 
 struct AxisConfig {
@@ -63,5 +68,9 @@ struct MapperPreset {
     std::array<AxisConfig, SDL_CONTROLLER_AXIS_MAX> axes{};
     std::array<AxisConfig, SDL_CONTROLLER_AXIS_MAX> shiftAxes{};  // When shift is held
 };
+
+// Serialization support
+std::string serializePreset(const MapperPreset& preset);
+bool deserializePreset(const std::string& json, MapperPreset& preset);
 
 }  // namespace MapperConfig
