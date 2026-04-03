@@ -3,9 +3,11 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 
 #include "Core/EventDispatcher.hpp"
 #include "DistrhoPlugin.hpp"
+#include "Logic/MapperConfig.hpp"
 
 START_NAMESPACE_DISTRHO
 
@@ -14,6 +16,15 @@ public:
     enum Parameters {
         kParamOctave = 0,
         kParamCount
+    };
+
+    enum States {
+        kStateConfig = 0,     // JSON serialized MapperPreset
+        kStateTriggerOctave,  // Current trigger octave offset
+        kStateEditMode,       // "true" (editing) or "false" (playing)
+        kStateWidth,          // Window width
+        kStateHeight,         // Window height
+        kStateCount
     };
 
     GameControllerMIDIPlugin();
@@ -52,6 +63,13 @@ protected:
     float getParameterValue(uint32_t index) const override;
     void setParameterValue(uint32_t index, float value) override;
 
+    /* ------------------------------------------------------------------
+     * State */
+
+    void initState(uint32_t index, State& state) override;
+    void setState(const char* key, const char* value) override;
+    String getState(const char* key) const override;
+
     /* -----------------------------------------------------------------
      * Process */
 
@@ -61,6 +79,21 @@ protected:
 public:
     // Core logic hub
     std::unique_ptr<GCMidi::EventDispatcher> fDispatcher;
+
+    // Active configuration (used by mapper)
+    MapperConfig::MapperPreset fActiveConfig{};
+
+    // Thread safety for config access
+    mutable std::mutex fConfigMutex;
+
+    // Runtime state
+    std::atomic<int8_t> fTriggerOctaveOffset{0};  // Cumulative LT/RT offset
+    std::atomic<bool> fPlayMode{true};            // true = Play, false = Edit
+    std::atomic<uint32_t> fWidth{1000};
+    std::atomic<uint32_t> fHeight{500};
+
+    // Helper to reload mapper from fActiveConfig
+    void reloadMapper();
 
 private:
     static std::atomic<int> sInstanceCount;
