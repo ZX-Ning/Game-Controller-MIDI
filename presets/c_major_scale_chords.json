@@ -12,26 +12,26 @@
     },
 
     "buttons": {
-        "a": { "mode": "note", "note": 60, "velocity": 100 },
-        "b": { "mode": "note", "note": 62, "velocity": 100 },
-        "x": { "mode": "note", "note": 64, "velocity": 100 },
-        "y": { "mode": "note", "note": 65, "velocity": 100 },
+        "x": { "mode": "note", "note": 60, "velocity": 100 },
+        "y": { "mode": "note", "note": 62, "velocity": 100 },
+        "a": { "mode": "note", "note": 65, "velocity": 100 },
+        "b": { "mode": "note", "note": 64, "velocity": 100 },
 
-        "dpad_up": { "mode": "chord", "note": 60, "velocity": 100, "intervals": [0, 4, 7] },
-        "dpad_down": { "mode": "chord", "note": 65, "velocity": 100, "intervals": [0, 4, 7] },
-        "dpad_left": { "mode": "chord", "note": 67, "velocity": 100, "intervals": [0, 4, 7] },
-        "dpad_right": { "mode": "chord", "note": 69, "velocity": 100, "intervals": [0, 3, 7] }
+        "dpad_left": { "mode": "chord", "note": 60, "velocity": 100, "intervals": [0, 4, 7], "chordOctaveOffset": 0 },
+        "dpad_up": { "mode": "chord", "note": 65, "velocity": 100, "intervals": [0, 4, 7], "chordOctaveOffset": -1 },
+        "dpad_right": { "mode": "chord", "note": 69, "velocity": 100, "intervals": [0, 3, 7], "chordOctaveOffset": -1 },
+        "dpad_down": { "mode": "chord", "note": 67, "velocity": 100, "intervals": [0, 4, 7], "chordOctaveOffset": -1 }
     },
 
     "shiftButtons": {
-        "a": { "mode": "note", "note": 67, "velocity": 100 },
-        "b": { "mode": "note", "note": 69, "velocity": 100 },
-        "x": { "mode": "note", "note": 71, "velocity": 100 },
-        "y": { "mode": "note", "note": 72, "velocity": 100 },
+        "x": { "mode": "note", "note": 67, "velocity": 100 },
+        "y": { "mode": "note", "note": 69, "velocity": 100 },
+        "a": { "mode": "note", "note": 72, "velocity": 100 },
+        "b": { "mode": "note", "note": 71, "velocity": 100 },
 
-        "dpad_up": { "mode": "chord", "note": 64, "velocity": 100, "intervals": [0, 3, 7] },
-        "dpad_down": { "mode": "chord", "note": 62, "velocity": 100, "intervals": [0, 3, 7] },
-        "dpad_left": { "mode": "chord", "note": 71, "velocity": 100, "intervals": [0, 3, 6] },
-        "dpad_right": { "mode": "chord", "note": 64, "velocity": 100, "intervals": [0, 4, 7] }
+        "dpad_left": { "mode": "chord", "note": 64, "velocity": 100, "intervals": [0, 3, 7], "chordOctaveOffset": 0 },
+        "dpad_up": { "mode": "chord", "note": 62, "velocity": 100, "intervals": [0, 3, 7], "chordOctaveOffset": 0 },
+        "dpad_right": { "mode": "chord", "note": 71, "velocity": 100, "intervals": [0, 3, 6], "chordOctaveOffset": -1 },
+        "dpad_down": { "mode": "none" }
     }
 }
