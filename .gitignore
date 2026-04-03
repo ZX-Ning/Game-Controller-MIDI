@@ -70,3 +70,5 @@ Testing/
 
 .vscode/settings.json
 .opencode
+.cache
+
