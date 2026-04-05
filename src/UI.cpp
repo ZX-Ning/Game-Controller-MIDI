@@ -14,6 +14,9 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <fstream>
+#include <sstream>
+
 #include "DistrhoPluginInfo.h"
 #include "DistrhoUI.hpp"
 #include "Plugin.hpp"
@@ -60,6 +63,21 @@ protected:
         ImGui::PopStyleVar();
         ImGui::End();
         ImGui::PopStyleVar();
+
+        // Render toast notification
+        if (fShowToast) {
+            fToastTimer -= ImGui::GetIO().DeltaTime;
+            if (fToastTimer <= 0) {
+                fShowToast = false;
+            }
+            else {
+                ImGui::SetNextWindowPos(ImVec2(width / 2, 50), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+                ImGui::SetNextWindowBgAlpha(0.9f);
+                ImGui::Begin("##Toast", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+                ImGui::Text("%s", fToastMessage.c_str());
+                ImGui::End();
+            }
+        }
     }
 
     void parameterChanged(uint32_t, float) override {
@@ -104,6 +122,19 @@ private:
     int fSelectedAxis = -1;
     bool fEditingShiftButton = false;
 
+    // File browser state
+    enum class FileBrowserMode {
+        None,
+        Import,
+        Export
+    };
+    FileBrowserMode fFileBrowserMode = FileBrowserMode::None;
+
+    // Toast notification
+    bool fShowToast = false;
+    std::string fToastMessage;
+    float fToastTimer = 0.0f;
+
     // Helper methods
     void renderPlayModeUI(GameControllerMIDIPlugin* plugin);
     void renderEditModeUI(GameControllerMIDIPlugin* plugin);
@@ -118,6 +149,12 @@ private:
 
     void loadDraftFromActive(GameControllerMIDIPlugin* plugin);
     void applyDraftToActive(GameControllerMIDIPlugin* plugin);
+
+    void importConfig();
+    void exportConfig();
+    void showToast(const std::string& message, float duration = 3.0f);
+
+    void uiFileBrowserSelected(const char* filename) override;
 
     const char* getButtonName(int button) {
         if (button < 0 || button >= SDL_CONTROLLER_BUTTON_MAX) {
@@ -331,20 +368,29 @@ void GameControllerMIDIUI::renderEditModeUI(GameControllerMIDIPlugin* plugin) {
     ImGui::Separator();
 
     // Action buttons
-    if (ImGui::Button("Apply & Play", ImVec2(width * 0.31f, 40))) {
+    const float btnWidth = width * 0.19f;
+    if (ImGui::Button("Import Config", ImVec2(btnWidth, 40))) {
+        importConfig();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Export Config", ImVec2(btnWidth, 40))) {
+        exportConfig();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Apply & Play", ImVec2(btnWidth, 40))) {
         applyDraftToActive(plugin);
         fIsEditMode = false;
         plugin->fPlayMode = true;
         setState("editMode", "false");
     }
     ImGui::SameLine();
-    if (ImGui::Button("Cancel", ImVec2(width * 0.31f, 40))) {
+    if (ImGui::Button("Cancel", ImVec2(btnWidth, 40))) {
         fIsEditMode = false;
         plugin->fPlayMode = true;
         setState("editMode", "false");
     }
     ImGui::SameLine();
-    if (ImGui::Button("Reset to Default", ImVec2(width * 0.31f, 40))) {
+    if (ImGui::Button("Reset to Default", ImVec2(btnWidth, 40))) {
         ImGui::OpenPopup("Confirm Reset");
     }
 
@@ -570,6 +616,91 @@ void GameControllerMIDIUI::applyDraftToActive(GameControllerMIDIPlugin* plugin) 
     // Persist to host outside lock
     std::string json = MapperConfig::serializePreset(fDraftConfig);
     setState("config", json.c_str());
+}
+
+void GameControllerMIDIUI::importConfig() {
+    FileBrowserOptions opts;
+    opts.saving = false;
+    opts.title = "Import Preset Configuration";
+    opts.defaultName = nullptr;
+
+    fFileBrowserMode = FileBrowserMode::Import;
+    if (!openFileBrowser(opts)) {
+        showToast("Failed to open file browser", 3.0f);
+        fFileBrowserMode = FileBrowserMode::None;
+    }
+}
+
+void GameControllerMIDIUI::exportConfig() {
+    FileBrowserOptions opts;
+    opts.saving = true;
+    opts.title = "Export Preset Configuration";
+    opts.defaultName = "preset.json";
+
+    fFileBrowserMode = FileBrowserMode::Export;
+    if (!openFileBrowser(opts)) {
+        showToast("Failed to open file browser", 3.0f);
+        fFileBrowserMode = FileBrowserMode::None;
+    }
+}
+
+void GameControllerMIDIUI::uiFileBrowserSelected(const char* filename) {
+    if (!filename) {
+        // User cancelled
+        fFileBrowserMode = FileBrowserMode::None;
+        return;
+    }
+
+    if (fFileBrowserMode == FileBrowserMode::Import) {
+        // Read file
+        std::ifstream file(filename);
+        if (!file.is_open()) {
+            showToast("Error: Could not open file", 3.0f);
+            fFileBrowserMode = FileBrowserMode::None;
+            return;
+        }
+
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        std::string jsonStr = buffer.str();
+        file.close();
+
+        // Parse JSON
+        MapperConfig::MapperPreset newPreset;
+        if (MapperConfig::deserializePreset(jsonStr, newPreset)) {
+            fDraftConfig = newPreset;
+            showToast("Config imported successfully", 2.0f);
+        }
+        else {
+            showToast("Error: Invalid JSON or parse failed", 3.0f);
+        }
+    }
+    else if (fFileBrowserMode == FileBrowserMode::Export) {
+        // Serialize current config
+        std::string jsonStr = MapperConfig::serializePreset(fDraftConfig);
+
+        // Write file
+        std::ofstream file(filename);
+        if (!file.is_open()) {
+            showToast("Error: Could not write file", 3.0f);
+            fFileBrowserMode = FileBrowserMode::None;
+            return;
+        }
+
+        file << jsonStr;
+        file.close();
+
+        showToast("Config exported successfully", 2.0f);
+    }
+
+    fFileBrowserMode = FileBrowserMode::None;
+}
+
+void GameControllerMIDIUI::showToast(const std::string& message, float duration) {
+    fToastMessage = message;
+    fToastTimer = duration;
+    fShowToast = true;
+    repaint();
 }
 
 END_NAMESPACE_DISTRHO

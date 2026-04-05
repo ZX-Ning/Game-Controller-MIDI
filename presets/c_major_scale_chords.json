@@ -1,37 +1,156 @@
 {
-    "name": "C Major Scale & Chords",
-    "channel": 0,
+    "axes": {},
     "baseOctaveOffset": 0,
-    "shiftButtonName": "rightshoulder",
-
     "buttonShiftKeys": {
-        "dpad_up": "leftshoulder",
         "dpad_down": "leftshoulder",
         "dpad_left": "leftshoulder",
-        "dpad_right": "leftshoulder"
+        "dpad_right": "leftshoulder",
+        "dpad_up": "leftshoulder"
     },
-
     "buttons": {
-        "x": { "mode": "note", "note": 60, "velocity": 100 },
-        "y": { "mode": "note", "note": 62, "velocity": 100 },
-        "a": { "mode": "note", "note": 65, "velocity": 100 },
-        "b": { "mode": "note", "note": 64, "velocity": 100 },
-
-        "dpad_left": { "mode": "chord", "note": 60, "velocity": 100, "intervals": [0, 4, 7], "chordOctaveOffset": 0 },
-        "dpad_up": { "mode": "chord", "note": 65, "velocity": 100, "intervals": [0, 4, 7], "chordOctaveOffset": -1 },
-        "dpad_right": { "mode": "chord", "note": 69, "velocity": 100, "intervals": [0, 3, 7], "chordOctaveOffset": -1 },
-        "dpad_down": { "mode": "chord", "note": 67, "velocity": 100, "intervals": [0, 4, 7], "chordOctaveOffset": -1 }
+        "a": {
+            "mode": "note",
+            "note": 65,
+            "velocity": 100
+        },
+        "b": {
+            "mode": "note",
+            "note": 64,
+            "velocity": 100
+        },
+        "dpad_down": {
+            "chordOctaveOffset": -1,
+            "intervals": [
+                0,
+                4,
+                7
+            ],
+            "mode": "chord",
+            "note": 67,
+            "shiftButton": 9,
+            "velocity": 100
+        },
+        "dpad_left": {
+            "chordOctaveOffset": 0,
+            "intervals": [
+                0,
+                4,
+                7
+            ],
+            "mode": "chord",
+            "note": 60,
+            "shiftButton": 9,
+            "velocity": 100
+        },
+        "dpad_right": {
+            "chordOctaveOffset": -1,
+            "intervals": [
+                0,
+                3,
+                7
+            ],
+            "mode": "chord",
+            "note": 69,
+            "shiftButton": 9,
+            "velocity": 100
+        },
+        "dpad_up": {
+            "chordOctaveOffset": -1,
+            "intervals": [
+                0,
+                4,
+                7
+            ],
+            "mode": "chord",
+            "note": 65,
+            "shiftButton": 9,
+            "velocity": 100
+        },
+        "x": {
+            "mode": "note",
+            "note": 60,
+            "velocity": 100
+        },
+        "y": {
+            "mode": "note",
+            "note": 62,
+            "velocity": 100
+        }
     },
-
+    "channel": 0,
+    "name": "C Major Scale & Chords",
+    "shiftAxes": {},
+    "shiftButton": 10,
+    "shiftButtonName": "rightshoulder",
     "shiftButtons": {
-        "x": { "mode": "note", "note": 67, "velocity": 100 },
-        "y": { "mode": "note", "note": 69, "velocity": 100 },
-        "a": { "mode": "note", "note": 72, "velocity": 100 },
-        "b": { "mode": "note", "note": 71, "velocity": 100 },
-
-        "dpad_left": { "mode": "chord", "note": 64, "velocity": 100, "intervals": [0, 3, 7], "chordOctaveOffset": 0 },
-        "dpad_up": { "mode": "chord", "note": 62, "velocity": 100, "intervals": [0, 3, 7], "chordOctaveOffset": 0 },
-        "dpad_right": { "mode": "chord", "note": 71, "velocity": 100, "intervals": [0, 3, 6], "chordOctaveOffset": -1 },
-        "dpad_down": { "mode": "none" }
+        "a": {
+            "mode": "note",
+            "note": 72,
+            "velocity": 100
+        },
+        "b": {
+            "mode": "note",
+            "note": 71,
+            "velocity": 100
+        },
+        "dpad_down": {
+            "chordOctaveOffset": 0,
+            "intervals": [
+                0,
+                3,
+                6
+            ],
+            "mode": "chord",
+            "note": 71,
+            "shiftButton": 9,
+            "velocity": 100
+        },
+        "dpad_left": {
+            "chordOctaveOffset": 0,
+            "intervals": [
+                0,
+                3,
+                7
+            ],
+            "mode": "chord",
+            "note": 64,
+            "shiftButton": 9,
+            "velocity": 100
+        },
+        "dpad_right": {
+            "chordOctaveOffset": -1,
+            "intervals": [
+                0,
+                4,
+                7,
+                10
+            ],
+            "mode": "chord",
+            "note": 76,
+            "shiftButton": 9,
+            "velocity": 100
+        },
+        "dpad_up": {
+            "chordOctaveOffset": 0,
+            "intervals": [
+                0,
+                3,
+                7
+            ],
+            "mode": "chord",
+            "note": 62,
+            "shiftButton": 9,
+            "velocity": 100
+        },
+        "x": {
+            "mode": "note",
+            "note": 67,
+            "velocity": 100
+        },
+        "y": {
+            "mode": "note",
+            "note": 69,
+            "velocity": 100
+        }
     }
 }

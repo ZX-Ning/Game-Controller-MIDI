@@ -33,6 +33,9 @@ dpf_add_plugin(GameControllerMIDI
         ${IMGUI_WIDGET_SRC}
 )
 
+# Enable file browser support
+target_compile_definitions(GameControllerMIDI PUBLIC DGL_USE_FILE_BROWSER=1)
+
 # After target creation:
 embed_all_presets(GameControllerMIDI "${CMAKE_CURRENT_SOURCE_DIR}/presets")
 
