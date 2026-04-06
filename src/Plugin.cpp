@@ -1,6 +1,8 @@
 #include "Plugin.hpp"
 
 #include <cstring>
+#include <string_view>
+#include <unordered_map>
 
 #include "Core/SdlManager.hpp"
 #include "Logic/FlexibleMapper.hpp"
@@ -9,6 +11,22 @@
 #include "preset_c_major_scale_chords.hpp"
 
 START_NAMESPACE_DISTRHO
+
+namespace {
+// Helper to convert state key string to enum
+int stringToStateEnum(std::string_view key) {
+    static const std::unordered_map<std::string_view, int> stateMap = {
+        {"config", GameControllerMIDIPlugin::kStateConfig},
+        {"triggerOctave", GameControllerMIDIPlugin::kStateTriggerOctave},
+        {"editMode", GameControllerMIDIPlugin::kStateEditMode},
+        {"width", GameControllerMIDIPlugin::kStateWidth},
+        {"height", GameControllerMIDIPlugin::kStateHeight}
+    };
+
+    auto it = stateMap.find(key);
+    return (it != stateMap.end()) ? it->second : -1;
+}
+}  // namespace
 
 std::atomic<int> GameControllerMIDIPlugin::sInstanceCount(0);
 
@@ -101,51 +119,70 @@ void GameControllerMIDIPlugin::initState(uint32_t index, State& state) {
 }
 
 void GameControllerMIDIPlugin::setState(const char* key, const char* value) {
-    if (std::strcmp(key, "config") == 0 && value && std::strlen(value) > 0) {
-        MapperConfig::MapperPreset newConfig;
-        if (MapperConfig::deserializePreset(value, newConfig)) {
-            {
-                std::lock_guard<std::mutex> lock(fConfigMutex);
-                fActiveConfig = newConfig;
+    int stateEnum = stringToStateEnum(key);
+    if (stateEnum < 0) {
+        return;
+    }
+
+    switch (stateEnum) {
+        case kStateConfig:
+            if (value && std::strlen(value) > 0) {
+                MapperConfig::MapperPreset newConfig;
+                if (MapperConfig::deserializePreset(value, newConfig)) {
+                    {
+                        std::lock_guard<std::mutex> lock(fConfigMutex);
+                        fActiveConfig = newConfig;
+                    }
+                    // Reload outside lock to avoid deadlock with UI direct access
+                    reloadMapper();
+                }
             }
-            // Reload outside lock to avoid deadlock with UI direct access
-            reloadMapper();
+            break;
+        case kStateTriggerOctave: {
+            int8_t offset = static_cast<int8_t>(std::atoi(value));
+            fTriggerOctaveOffset = offset;
+            if (fDispatcher) {
+                fDispatcher->setTriggerOctaveOffset(offset);
+            }
+            break;
         }
-    }
-    else if (std::strcmp(key, "triggerOctave") == 0) {
-        int8_t offset = static_cast<int8_t>(std::atoi(value));
-        fTriggerOctaveOffset = offset;
-        if (fDispatcher) {
-            fDispatcher->setTriggerOctaveOffset(offset);
-        }
-    }
-    else if (std::strcmp(key, "editMode") == 0) {
-        fPlayMode = (std::strcmp(value, "true") != 0);  // editMode=true -> fPlayMode=false
-    }
-    else if (std::strcmp(key, "width") == 0) {
-        fWidth = static_cast<uint32_t>(std::atoi(value));
-    }
-    else if (std::strcmp(key, "height") == 0) {
-        fHeight = static_cast<uint32_t>(std::atoi(value));
+        case kStateEditMode:
+            fPlayMode = (std::strcmp(value, "true") != 0);  // editMode=true -> fPlayMode=false
+            break;
+        case kStateWidth:
+            fWidth = static_cast<uint32_t>(std::atoi(value));
+            break;
+        case kStateHeight:
+            fHeight = static_cast<uint32_t>(std::atoi(value));
+            break;
+        case kStateCount:
+            // Sentinel value, not an actual state
+            break;
     }
 }
 
 String GameControllerMIDIPlugin::getState(const char* key) const {
-    if (std::strcmp(key, "config") == 0) {
-        std::lock_guard<std::mutex> lock(fConfigMutex);
-        return String(MapperConfig::serializePreset(fActiveConfig).c_str());
+    int stateEnum = stringToStateEnum(key);
+    if (stateEnum < 0) {
+        return String("");
     }
-    else if (std::strcmp(key, "triggerOctave") == 0) {
-        return String(std::to_string(fTriggerOctaveOffset.load()).c_str());
-    }
-    else if (std::strcmp(key, "editMode") == 0) {
-        return String(!fPlayMode.load() ? "true" : "false");
-    }
-    else if (std::strcmp(key, "width") == 0) {
-        return String(std::to_string(fWidth.load()).c_str());
-    }
-    else if (std::strcmp(key, "height") == 0) {
-        return String(std::to_string(fHeight.load()).c_str());
+
+    switch (stateEnum) {
+        case kStateConfig: {
+            std::lock_guard<std::mutex> lock(fConfigMutex);
+            return String(MapperConfig::serializePreset(fActiveConfig).c_str());
+        }
+        case kStateTriggerOctave:
+            return String(std::to_string(fTriggerOctaveOffset.load()).c_str());
+        case kStateEditMode:
+            return String(!fPlayMode.load() ? "true" : "false");
+        case kStateWidth:
+            return String(std::to_string(fWidth.load()).c_str());
+        case kStateHeight:
+            return String(std::to_string(fHeight.load()).c_str());
+        case kStateCount:
+            // Sentinel value, not an actual state
+            break;
     }
     return String("");
 }

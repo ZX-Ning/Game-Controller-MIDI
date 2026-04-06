@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstring>
 #include <nlohmann/json.hpp>
+#include <unordered_map>
 
 #include "MapperConfig.hpp"
 
@@ -10,93 +11,47 @@ using json = nlohmann::json;
 
 // Helper: Button name to SDL constant mapping
 int buttonNameToIndex(std::string_view name) {
-    if (name == "a") {
-        return SDL_CONTROLLER_BUTTON_A;
-    }
-    if (name == "b") {
-        return SDL_CONTROLLER_BUTTON_B;
-    }
-    if (name == "x") {
-        return SDL_CONTROLLER_BUTTON_X;
-    }
-    if (name == "y") {
-        return SDL_CONTROLLER_BUTTON_Y;
-    }
-    if (name == "back") {
-        return SDL_CONTROLLER_BUTTON_BACK;
-    }
-    if (name == "guide") {
-        return SDL_CONTROLLER_BUTTON_GUIDE;
-    }
-    if (name == "start") {
-        return SDL_CONTROLLER_BUTTON_START;
-    }
-    if (name == "leftstick") {
-        return SDL_CONTROLLER_BUTTON_LEFTSTICK;
-    }
-    if (name == "rightstick") {
-        return SDL_CONTROLLER_BUTTON_RIGHTSTICK;
-    }
-    if (name == "leftshoulder") {
-        return SDL_CONTROLLER_BUTTON_LEFTSHOULDER;
-    }
-    if (name == "rightshoulder") {
-        return SDL_CONTROLLER_BUTTON_RIGHTSHOULDER;
-    }
-    if (name == "dpad_up") {
-        return SDL_CONTROLLER_BUTTON_DPAD_UP;
-    }
-    if (name == "dpad_down") {
-        return SDL_CONTROLLER_BUTTON_DPAD_DOWN;
-    }
-    if (name == "dpad_left") {
-        return SDL_CONTROLLER_BUTTON_DPAD_LEFT;
-    }
-    if (name == "dpad_right") {
-        return SDL_CONTROLLER_BUTTON_DPAD_RIGHT;
-    }
-    if (name == "misc1") {
-        return SDL_CONTROLLER_BUTTON_MISC1;
-    }
-    if (name == "paddle1") {
-        return SDL_CONTROLLER_BUTTON_PADDLE1;
-    }
-    if (name == "paddle2") {
-        return SDL_CONTROLLER_BUTTON_PADDLE2;
-    }
-    if (name == "paddle3") {
-        return SDL_CONTROLLER_BUTTON_PADDLE3;
-    }
-    if (name == "paddle4") {
-        return SDL_CONTROLLER_BUTTON_PADDLE4;
-    }
-    if (name == "touchpad") {
-        return SDL_CONTROLLER_BUTTON_TOUCHPAD;
-    }
-    return -1;
+    static const std::unordered_map<std::string_view, int> buttonMap = {
+        {"a", SDL_CONTROLLER_BUTTON_A},
+        {"b", SDL_CONTROLLER_BUTTON_B},
+        {"x", SDL_CONTROLLER_BUTTON_X},
+        {"y", SDL_CONTROLLER_BUTTON_Y},
+        {"back", SDL_CONTROLLER_BUTTON_BACK},
+        {"guide", SDL_CONTROLLER_BUTTON_GUIDE},
+        {"start", SDL_CONTROLLER_BUTTON_START},
+        {"leftstick", SDL_CONTROLLER_BUTTON_LEFTSTICK},
+        {"rightstick", SDL_CONTROLLER_BUTTON_RIGHTSTICK},
+        {"leftshoulder", SDL_CONTROLLER_BUTTON_LEFTSHOULDER},
+        {"rightshoulder", SDL_CONTROLLER_BUTTON_RIGHTSHOULDER},
+        {"dpad_up", SDL_CONTROLLER_BUTTON_DPAD_UP},
+        {"dpad_down", SDL_CONTROLLER_BUTTON_DPAD_DOWN},
+        {"dpad_left", SDL_CONTROLLER_BUTTON_DPAD_LEFT},
+        {"dpad_right", SDL_CONTROLLER_BUTTON_DPAD_RIGHT},
+        {"misc1", SDL_CONTROLLER_BUTTON_MISC1},
+        {"paddle1", SDL_CONTROLLER_BUTTON_PADDLE1},
+        {"paddle2", SDL_CONTROLLER_BUTTON_PADDLE2},
+        {"paddle3", SDL_CONTROLLER_BUTTON_PADDLE3},
+        {"paddle4", SDL_CONTROLLER_BUTTON_PADDLE4},
+        {"touchpad", SDL_CONTROLLER_BUTTON_TOUCHPAD}
+    };
+
+    auto it = buttonMap.find(name);
+    return (it != buttonMap.end()) ? it->second : -1;
 }
 
 // Helper: Axis name to SDL constant mapping
 int axisNameToIndex(std::string_view name) {
-    if (name == "leftx") {
-        return SDL_CONTROLLER_AXIS_LEFTX;
-    }
-    if (name == "lefty") {
-        return SDL_CONTROLLER_AXIS_LEFTY;
-    }
-    if (name == "rightx") {
-        return SDL_CONTROLLER_AXIS_RIGHTX;
-    }
-    if (name == "righty") {
-        return SDL_CONTROLLER_AXIS_RIGHTY;
-    }
-    if (name == "triggerleft") {
-        return SDL_CONTROLLER_AXIS_TRIGGERLEFT;
-    }
-    if (name == "triggerright") {
-        return SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
-    }
-    return -1;
+    static const std::unordered_map<std::string_view, int> axisMap = {
+        {"leftx", SDL_CONTROLLER_AXIS_LEFTX},
+        {"lefty", SDL_CONTROLLER_AXIS_LEFTY},
+        {"rightx", SDL_CONTROLLER_AXIS_RIGHTX},
+        {"righty", SDL_CONTROLLER_AXIS_RIGHTY},
+        {"triggerleft", SDL_CONTROLLER_AXIS_TRIGGERLEFT},
+        {"triggerright", SDL_CONTROLLER_AXIS_TRIGGERRIGHT}
+    };
+
+    auto it = axisMap.find(name);
+    return (it != axisMap.end()) ? it->second : -1;
 }
 
 // Helper: Button index to name
@@ -147,25 +102,17 @@ const char* buttonModeToString(ButtonMode mode) {
 
 // Helper: String to ButtonMode
 ButtonMode parseButtonMode(std::string_view mode) {
-    if (mode == "note") {
-        return ButtonMode::Note;
-    }
-    if (mode == "chord") {
-        return ButtonMode::Chord;
-    }
-    if (mode == "cc_momentary") {
-        return ButtonMode::CC_Momentary;
-    }
-    if (mode == "cc_toggle") {
-        return ButtonMode::CC_Toggle;
-    }
-    if (mode == "octave_up") {
-        return ButtonMode::OctaveUp;
-    }
-    if (mode == "octave_down") {
-        return ButtonMode::OctaveDown;
-    }
-    return ButtonMode::None;
+    static const std::unordered_map<std::string_view, ButtonMode> modeMap = {
+        {"note", ButtonMode::Note},
+        {"chord", ButtonMode::Chord},
+        {"cc_momentary", ButtonMode::CC_Momentary},
+        {"cc_toggle", ButtonMode::CC_Toggle},
+        {"octave_up", ButtonMode::OctaveUp},
+        {"octave_down", ButtonMode::OctaveDown}
+    };
+
+    auto it = modeMap.find(mode);
+    return (it != modeMap.end()) ? it->second : ButtonMode::None;
 }
 
 // Helper: AxisMode to string
@@ -184,16 +131,14 @@ const char* axisModeToString(AxisMode mode) {
 
 // Helper: String to AxisMode
 AxisMode parseAxisMode(std::string_view mode) {
-    if (mode == "cc") {
-        return AxisMode::CC;
-    }
-    if (mode == "pitchbend") {
-        return AxisMode::PitchBend;
-    }
-    if (mode == "aftertouch") {
-        return AxisMode::Aftertouch;
-    }
-    return AxisMode::None;
+    static const std::unordered_map<std::string_view, AxisMode> modeMap = {
+        {"cc", AxisMode::CC},
+        {"pitchbend", AxisMode::PitchBend},
+        {"aftertouch", AxisMode::Aftertouch}
+    };
+
+    auto it = modeMap.find(mode);
+    return (it != modeMap.end()) ? it->second : AxisMode::None;
 }
 
 // Serialize ButtonConfig to JSON
