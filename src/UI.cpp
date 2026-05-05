@@ -16,6 +16,8 @@
 
 #include <fstream>
 #include <sstream>
+#include <cstdlib>
+#include <cstring>
 
 #include "DistrhoPluginInfo.h"
 #include "DistrhoUI.hpp"
@@ -190,9 +192,9 @@ void GameControllerMIDIUI::renderPlayModeUI(GameControllerMIDIPlugin* plugin) {
         ImGui::TextColored(ImVec4(0, 1, 0, 1), "Connected: %s", dispatcher.getControllerName().c_str());
 
         // Octave display (base + trigger)
-        if (auto mapper = dispatcher.getMapper()) {
-            int baseOctave = mapper->getOctaveOffset();
-            int triggerOctave = mapper->getTriggerOctaveOffset();
+        {
+            int baseOctave = dispatcher.getBaseOctaveOffset();
+            int triggerOctave = dispatcher.getTriggerOctaveOffset();
             ImGui::SameLine();
             ImGui::TextDisabled("|");
             ImGui::SameLine();
@@ -224,10 +226,8 @@ void GameControllerMIDIUI::renderPlayModeUI(GameControllerMIDIPlugin* plugin) {
         if (ImGui::IsItemHovered()) {
             ImGui::BeginTooltip();
             ImGui::Text("Button: %s", label);
-            if (auto mapper = dispatcher.getMapper()) {
-                uint8_t shiftBtn = mapper->getShiftButtonForButton(buttonIdx);
-                ImGui::Text("Shift: %s", getButtonName(shiftBtn));
-            }
+            uint8_t shiftBtn = dispatcher.getShiftButtonForButton(buttonIdx);
+            ImGui::Text("Shift: %s", getButtonName(shiftBtn));
             ImGui::EndTooltip();
         }
     };
@@ -273,10 +273,10 @@ void GameControllerMIDIUI::renderPlayModeUI(GameControllerMIDIPlugin* plugin) {
 
     ImGui::BeginGroup();
     ImGui::Text("Shift Status:");
-    if (auto mapper = dispatcher.getMapper()) {
+    {
         bool shiftButtonsUsed[SDL_CONTROLLER_BUTTON_MAX] = {false};
         for (int i = 0; i < SDL_CONTROLLER_BUTTON_MAX; ++i) {
-            uint8_t s = mapper->getShiftButtonForButton(i);
+            uint8_t s = dispatcher.getShiftButtonForButton(i);
             if (s < SDL_CONTROLLER_BUTTON_MAX) {
                 shiftButtonsUsed[s] = true;
             }
@@ -292,6 +292,13 @@ void GameControllerMIDIUI::renderPlayModeUI(GameControllerMIDIPlugin* plugin) {
     ImGui::EndGroup();
 
     ImGui::Separator();
+
+    uint64_t droppedMidi = dispatcher.getDroppedMidiEventCount();
+    if (droppedMidi > 0) {
+        ImGui::TextColored(ImVec4(1, 0.7f, 0, 1), "Dropped MIDI events: %llu (Note Off: %llu)",
+                           static_cast<unsigned long long>(droppedMidi),
+                           static_cast<unsigned long long>(dispatcher.getDroppedNoteOffCount()));
+    }
 
     if (ImGui::Button("Edit Config", ImVec2(-1, 40))) {
         fIsEditMode = true;

@@ -10,8 +10,6 @@
 
 namespace GCMidi {
 
-using MidiQueue = boost::lockfree::queue<RawMidi>;
-
 class FlexibleMapper : public IMidiMapper {
 public:
     FlexibleMapper();
@@ -31,8 +29,9 @@ public:
     void setPreset(const MapperConfig::MapperPreset& preset);
 
     // IMidiMapper interface
-    void onButton(uint8_t button, bool pressed, bool shift, MidiQueue& queue) override;
-    void onAxis(uint8_t axis, int16_t value, bool shift, MidiQueue& queue) override;
+    void onButton(uint8_t button, bool pressed, bool shift, IMidiOutputSink& out) override;
+    void onAxis(uint8_t axis, int16_t value, bool shift, IMidiOutputSink& out) override;
+    bool flushActiveNotes(IMidiOutputSink& out) override;
     int getOctaveOffset() const override;
     void setOctaveOffset(int offset) override;
 
@@ -42,7 +41,7 @@ public:
 
     // Distinguish melody from chords in octave application
     uint8_t applyMelodyOctave(uint8_t baseNote, int8_t triggerOctave) const;
-    uint8_t applyChordOctave(uint8_t baseNote, int8_t chordOctaveOffset) const;
+    uint8_t applyChordOctave(int baseNote, int8_t chordOctaveOffset) const;
 
     uint8_t getShiftButton() const override;
     uint8_t getShiftButtonForButton(uint8_t button) const override;
@@ -68,13 +67,13 @@ private:
     std::array<uint8_t, SDL_CONTROLLER_AXIS_MAX> fLastAxisAftertouchValues{};
 
     // Internal helpers
-    void handleNoteMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, MidiQueue& queue);
-    void handleChordMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, MidiQueue& queue);
-    void handleCCMomentary(const MapperConfig::ButtonConfig& config, bool pressed, MidiQueue& queue);
-    void handleCCToggle(const MapperConfig::ButtonConfig& config, bool pressed, MidiQueue& queue);
+    void handleNoteMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, IMidiOutputSink& out);
+    void handleChordMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, IMidiOutputSink& out);
+    void handleCCMomentary(const MapperConfig::ButtonConfig& config, bool pressed, IMidiOutputSink& out);
+    void handleCCToggle(const MapperConfig::ButtonConfig& config, bool pressed, IMidiOutputSink& out);
 
-    void handleAxisCC(const MapperConfig::AxisConfig& config, int16_t value, uint8_t axis, MidiQueue& queue);
-    void handleAxisPitchBend(const MapperConfig::AxisConfig& config, int16_t value, uint8_t axis, MidiQueue& queue);
+    void handleAxisCC(const MapperConfig::AxisConfig& config, int16_t value, uint8_t axis, IMidiOutputSink& out);
+    void handleAxisPitchBend(const MapperConfig::AxisConfig& config, int16_t value, uint8_t axis, IMidiOutputSink& out);
 
     uint8_t clampNote(int note) const;
     float normalizeAxis(int16_t value, const MapperConfig::AxisConfig& config) const;

@@ -37,7 +37,7 @@ void FlexibleMapper::setPreset(const MapperConfig::MapperPreset& preset) {
     fLastAxisAftertouchValues.fill(255);
 }
 
-void FlexibleMapper::onButton(uint8_t button, bool pressed, bool shift, MidiQueue& queue) {
+void FlexibleMapper::onButton(uint8_t button, bool pressed, bool shift, IMidiOutputSink& out) {
     if (button >= SDL_CONTROLLER_BUTTON_MAX) {
         return;
     }
@@ -46,16 +46,16 @@ void FlexibleMapper::onButton(uint8_t button, bool pressed, bool shift, MidiQueu
 
     switch (config.mode) {
         case MapperConfig::ButtonMode::Note:
-            handleNoteMode(config, pressed, button, queue);
+            handleNoteMode(config, pressed, button, out);
             break;
         case MapperConfig::ButtonMode::Chord:
-            handleChordMode(config, pressed, button, queue);
+            handleChordMode(config, pressed, button, out);
             break;
         case MapperConfig::ButtonMode::CC_Momentary:
-            handleCCMomentary(config, pressed, queue);
+            handleCCMomentary(config, pressed, out);
             break;
         case MapperConfig::ButtonMode::CC_Toggle:
-            handleCCToggle(config, pressed, queue);
+            handleCCToggle(config, pressed, out);
             break;
         case MapperConfig::ButtonMode::OctaveUp:
             if (pressed && fOctaveOffset < 4) {
@@ -73,7 +73,7 @@ void FlexibleMapper::onButton(uint8_t button, bool pressed, bool shift, MidiQueu
     }
 }
 
-void FlexibleMapper::onAxis(uint8_t axis, int16_t value, bool shift, MidiQueue& queue) {
+void FlexibleMapper::onAxis(uint8_t axis, int16_t value, bool shift, IMidiOutputSink& out) {
     if (axis >= SDL_CONTROLLER_AXIS_MAX) {
         return;
     }
@@ -82,10 +82,10 @@ void FlexibleMapper::onAxis(uint8_t axis, int16_t value, bool shift, MidiQueue& 
 
     switch (config.mode) {
         case MapperConfig::AxisMode::CC:
-            handleAxisCC(config, value, axis, queue);
+            handleAxisCC(config, value, axis, out);
             break;
         case MapperConfig::AxisMode::PitchBend:
-            handleAxisPitchBend(config, value, axis, queue);
+            handleAxisPitchBend(config, value, axis, out);
             break;
         case MapperConfig::AxisMode::Aftertouch:
             // Similar to CC but uses aftertouch message
@@ -103,7 +103,7 @@ void FlexibleMapper::onAxis(uint8_t axis, int16_t value, bool shift, MidiQueue& 
                 midi.data[0] = 0xD0 | (fPreset.channel & 0x0F);  // Channel Aftertouch
                 midi.data[1] = atValue;
                 midi.size = 2;
-                queue.push(midi);
+                out.pushMidi(midi);
             }
             break;
         case MapperConfig::AxisMode::None:
@@ -133,7 +133,7 @@ uint8_t FlexibleMapper::applyMelodyOctave(uint8_t baseNote, int8_t triggerOctave
     return clampNote(total);
 }
 
-uint8_t FlexibleMapper::applyChordOctave(uint8_t baseNote, int8_t chordOctaveOffset) const {
+uint8_t FlexibleMapper::applyChordOctave(int baseNote, int8_t chordOctaveOffset) const {
     // Chords ignore trigger octave, only use base + chord-specific offset
     int total = baseNote + (fOctaveOffset * 12) + (chordOctaveOffset * 12);
     return clampNote(total);
@@ -157,20 +157,41 @@ uint8_t FlexibleMapper::getShiftButtonForButton(uint8_t button) const {
     return fPreset.shiftButton;
 }
 
-void FlexibleMapper::handleNoteMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, MidiQueue& queue) {
+bool FlexibleMapper::flushActiveNotes(IMidiOutputSink& out) {
+    bool allQueued = true;
+    for (auto& notes : fActiveNotes) {
+        uint8_t remainingCount = 0;
+        for (size_t i = 0; i < notes.count; ++i) {
+            RawMidi midi{};
+            midi.data[0] = 0x80 | (fPreset.channel & 0x0F);
+            midi.data[1] = notes.notes[i];
+            midi.data[2] = 0;
+            midi.size = 3;
+
+            if (!out.pushMidi(midi)) {
+                notes.notes[remainingCount++] = notes.notes[i];
+                allQueued = false;
+            }
+        }
+        notes.count = remainingCount;
+    }
+    return allQueued;
+}
+
+void FlexibleMapper::handleNoteMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, IMidiOutputSink& out) {
     if (pressed) {
         // Calculate note and store it for later Note Off
         uint8_t note = applyMelodyOctave(config.noteOrCC, fTriggerOctaveOffset);
-
-        fActiveNotes[button].count = 1;
-        fActiveNotes[button].notes[0] = note;
 
         RawMidi midi{};
         midi.data[0] = 0x90 | (fPreset.channel & 0x0F);  // Note On
         midi.data[1] = note;
         midi.data[2] = config.velocity;
         midi.size = 3;
-        queue.push(midi);
+        if (out.pushMidi(midi)) {
+            fActiveNotes[button].count = 1;
+            fActiveNotes[button].notes[0] = note;
+        }
     }
     else {
         // Send Note Off for the stored note, not recalculated one
@@ -180,55 +201,58 @@ void FlexibleMapper::handleNoteMode(const MapperConfig::ButtonConfig& config, bo
             midi.data[1] = fActiveNotes[button].notes[0];
             midi.data[2] = 0;
             midi.size = 3;
-            queue.push(midi);
-
-            fActiveNotes[button].count = 0;
+            if (out.pushMidi(midi)) {
+                fActiveNotes[button].count = 0;
+            }
         }
     }
 }
 
-void FlexibleMapper::handleChordMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, MidiQueue& queue) {
+void FlexibleMapper::handleChordMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, IMidiOutputSink& out) {
     if (pressed) {
         // Calculate and store all chord notes
         fActiveNotes[button].count = 0;
         for (size_t i = 0; i < config.intervalCount && i < MapperConfig::MAX_ACTIVE_NOTES; ++i) {
-            uint8_t baseNote = config.noteOrCC + config.chordIntervals[i];
+            int baseNote = static_cast<int>(config.noteOrCC) + static_cast<int>(config.chordIntervals[i]);
             uint8_t clampedNote = applyChordOctave(baseNote, config.chordOctaveOffset);
-
-            fActiveNotes[button].notes[fActiveNotes[button].count++] = clampedNote;
 
             RawMidi midi{};
             midi.data[0] = 0x90 | (fPreset.channel & 0x0F);  // Note On
             midi.data[1] = clampedNote;
             midi.data[2] = config.velocity;
             midi.size = 3;
-            queue.push(midi);
+            if (out.pushMidi(midi)) {
+                fActiveNotes[button].notes[fActiveNotes[button].count++] = clampedNote;
+            }
         }
     }
     else {
         // Send Note Off for all active notes
+        uint8_t remainingCount = 0;
         for (size_t i = 0; i < fActiveNotes[button].count; ++i) {
             RawMidi midi{};
             midi.data[0] = 0x80 | (fPreset.channel & 0x0F);  // Note Off
             midi.data[1] = fActiveNotes[button].notes[i];
             midi.data[2] = 0;
             midi.size = 3;
-            queue.push(midi);
+            if (!out.pushMidi(midi)) {
+                fActiveNotes[button].notes[remainingCount++] = fActiveNotes[button].notes[i];
+            }
         }
-        fActiveNotes[button].count = 0;
+        fActiveNotes[button].count = remainingCount;
     }
 }
 
-void FlexibleMapper::handleCCMomentary(const MapperConfig::ButtonConfig& config, bool pressed, MidiQueue& queue) {
+void FlexibleMapper::handleCCMomentary(const MapperConfig::ButtonConfig& config, bool pressed, IMidiOutputSink& out) {
     RawMidi midi{};
     midi.data[0] = 0xB0 | (fPreset.channel & 0x0F);  // Control Change
     midi.data[1] = config.noteOrCC;
     midi.data[2] = pressed ? 127 : 0;
     midi.size = 3;
-    queue.push(midi);
+    out.pushMidi(midi);
 }
 
-void FlexibleMapper::handleCCToggle(const MapperConfig::ButtonConfig& config, bool pressed, MidiQueue& queue) {
+void FlexibleMapper::handleCCToggle(const MapperConfig::ButtonConfig& config, bool pressed, IMidiOutputSink& out) {
     if (!pressed) {
         return;  // Only toggle on press
     }
@@ -241,10 +265,10 @@ void FlexibleMapper::handleCCToggle(const MapperConfig::ButtonConfig& config, bo
     midi.data[1] = config.noteOrCC;
     midi.data[2] = state ? 127 : 0;
     midi.size = 3;
-    queue.push(midi);
+    out.pushMidi(midi);
 }
 
-void FlexibleMapper::handleAxisCC(const MapperConfig::AxisConfig& config, int16_t value, uint8_t axis, MidiQueue& queue) {
+void FlexibleMapper::handleAxisCC(const MapperConfig::AxisConfig& config, int16_t value, uint8_t axis, IMidiOutputSink& out) {
     float normalized = normalizeAxis(value, config);
     uint8_t ccValue = static_cast<uint8_t>(normalized * 127.0f);
 
@@ -259,10 +283,10 @@ void FlexibleMapper::handleAxisCC(const MapperConfig::AxisConfig& config, int16_
     midi.data[1] = config.ccNumber;
     midi.data[2] = ccValue;
     midi.size = 3;
-    queue.push(midi);
+    out.pushMidi(midi);
 }
 
-void FlexibleMapper::handleAxisPitchBend(const MapperConfig::AxisConfig& config, int16_t value, uint8_t axis, MidiQueue& queue) {
+void FlexibleMapper::handleAxisPitchBend(const MapperConfig::AxisConfig& config, int16_t value, uint8_t axis, IMidiOutputSink& out) {
     float normalized = normalizeAxis(value, config);
     uint16_t bendValue = static_cast<uint16_t>(normalized * 16383.0f);
 
@@ -277,7 +301,7 @@ void FlexibleMapper::handleAxisPitchBend(const MapperConfig::AxisConfig& config,
     midi.data[1] = bendValue & 0x7F;                 // LSB
     midi.data[2] = (bendValue >> 7) & 0x7F;          // MSB
     midi.size = 3;
-    queue.push(midi);
+    out.pushMidi(midi);
 }
 
 uint8_t FlexibleMapper::clampNote(int note) const {

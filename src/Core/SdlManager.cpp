@@ -1,6 +1,7 @@
 #include "SdlManager.hpp"
 
 #include <chrono>
+#include <cstdio>
 
 namespace GCMidi {
 
@@ -10,7 +11,7 @@ SdlManager& SdlManager::getInstance() {
 }
 
 SdlManager::SdlManager()
-    : fRunning(false), fController(nullptr), fHandler(nullptr) {
+    : fRunning(false), fController(nullptr) {
 }
 
 SdlManager::~SdlManager() {
@@ -19,33 +20,71 @@ SdlManager::~SdlManager() {
 
 void SdlManager::setEventHandler(IControllerEventHandler* handler) {
     bool doInit = false;
-    bool doCleanup = false;
+    bool registered = false;
 
     {
         std::lock_guard<std::mutex> lock(fMutex);
-        fHandler = handler;
-
-        if (handler && !fRunning) {
-            doInit = true;
+        if (!handler) {
+            return;
         }
-        else if (!handler && fRunning) {
-            doCleanup = true;
+
+        for (auto* existing : fHandlers) {
+            if (existing == handler) {
+                registered = true;
+                break;
+            }
+        }
+
+        if (!registered) {
+            for (auto& slot : fHandlers) {
+                if (!slot) {
+                    slot = handler;
+                    registered = true;
+                    break;
+                }
+            }
+        }
+
+        if (!registered) {
+            fprintf(stderr, "SdlManager handler registry full; ignoring plugin instance\n");
+            return;
+        }
+
+        if (!fRunning) {
+            doInit = true;
         }
     }
 
     if (doInit) {
         init();
         std::lock_guard<std::mutex> lock(fMutex);
-        if (fHandler) {
+        if (hasHandlersLocked()) {
             checkControllerStatus();
         }
     }
-    else if (doCleanup) {
-        cleanup();
-    }
-    else if (handler) {
+    else {
         std::lock_guard<std::mutex> lock(fMutex);
         checkControllerStatus();
+    }
+}
+
+void SdlManager::clearEventHandler(IControllerEventHandler* handler) {
+    bool doCleanup = false;
+
+    {
+        std::lock_guard<std::mutex> lock(fMutex);
+        for (auto& slot : fHandlers) {
+            if (slot == handler) {
+                slot = nullptr;
+                break;
+            }
+        }
+
+        doCleanup = fRunning && !hasHandlersLocked();
+    }
+
+    if (doCleanup) {
+        cleanup();
     }
 }
 
@@ -56,6 +95,7 @@ void SdlManager::init() {
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return;
     }
+    fSdlInitialized = true;
     fRunning = true;
     fThread = std::thread(&SdlManager::loop, this);
 }
@@ -69,15 +109,19 @@ void SdlManager::cleanup() {
         SDL_GameControllerClose(fController);
         fController = nullptr;
     }
-    if (SDL_WasInit(SDL_INIT_GAMECONTROLLER)) {
-        SDL_Quit();
+    if (fSdlInitialized && SDL_WasInit(SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK)) {
+        SDL_QuitSubSystem(SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK);
+        fSdlInitialized = false;
     }
 }
 
 void SdlManager::checkControllerStatus() {
     if (fController) {
-        if (fHandler) {
-            fHandler->onControllerConnected(SDL_GameControllerName(fController));
+        auto handlers = getHandlerSnapshotLocked();
+        for (auto* handler : handlers) {
+            if (handler) {
+                handler->onControllerConnected(SDL_GameControllerName(fController));
+            }
         }
         return;
     }
@@ -88,8 +132,11 @@ void SdlManager::checkControllerStatus() {
             if (ctrl) {
                 fController = ctrl;
                 const char* name = SDL_GameControllerName(ctrl);
-                if (fHandler && name) {
-                    fHandler->onControllerConnected(name);
+                auto handlers = getHandlerSnapshotLocked();
+                for (auto* handler : handlers) {
+                    if (handler && name) {
+                        handler->onControllerConnected(name);
+                    }
                 }
                 break;  // Only open the first one
             }
@@ -139,34 +186,64 @@ void SdlManager::handleControllerRemoved(const SDL_ControllerDeviceEvent& event)
     if (instanceId == (SDL_JoystickID)event.which) {
         SDL_GameControllerClose(fController);
         fController = nullptr;
-        if (fHandler) {
-            fHandler->onControllerDisconnected();
+        auto handlers = getHandlerSnapshotLocked();
+        for (auto* handler : handlers) {
+            if (handler) {
+                handler->onControllerDisconnected();
+            }
         }
     }
 }
 
 void SdlManager::handleControllerButton(const SDL_ControllerButtonEvent& event) {
-    if (!fHandler || !fController) {
+    if (!fController) {
         return;
     }
 
     bool down = (event.type == SDL_CONTROLLERBUTTONDOWN);
     uint8_t button = event.button;
-    uint8_t shiftBtn = fHandler->getShiftButtonForButton(button);
-    bool shift = SDL_GameControllerGetButton(fController, static_cast<SDL_GameControllerButton>(shiftBtn)) == 1;
-    fHandler->onControllerButton(button, down, shift);
+    auto handlers = getHandlerSnapshotLocked();
+    for (auto* handler : handlers) {
+        if (!handler) {
+            continue;
+        }
+
+        uint8_t shiftBtn = handler->getShiftButtonForButton(button);
+        bool shift = SDL_GameControllerGetButton(fController, static_cast<SDL_GameControllerButton>(shiftBtn)) == 1;
+        handler->onControllerButton(button, down, shift);
+    }
 }
 
 void SdlManager::handleControllerAxis(const SDL_ControllerAxisEvent& event) {
-    if (!fHandler || !fController) {
+    if (!fController) {
         return;
     }
 
     uint8_t axis = event.axis;
     int16_t value = event.value;
-    uint8_t shiftBtn = fHandler->getShiftButton();
-    bool shift = SDL_GameControllerGetButton(fController, static_cast<SDL_GameControllerButton>(shiftBtn)) == 1;
-    fHandler->onControllerAxis(axis, value, shift);
+    auto handlers = getHandlerSnapshotLocked();
+    for (auto* handler : handlers) {
+        if (!handler) {
+            continue;
+        }
+
+        uint8_t shiftBtn = handler->getShiftButton();
+        bool shift = SDL_GameControllerGetButton(fController, static_cast<SDL_GameControllerButton>(shiftBtn)) == 1;
+        handler->onControllerAxis(axis, value, shift);
+    }
+}
+
+bool SdlManager::hasHandlersLocked() const {
+    for (auto* handler : fHandlers) {
+        if (handler) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::array<IControllerEventHandler*, MAX_SDL_EVENT_HANDLERS> SdlManager::getHandlerSnapshotLocked() const {
+    return fHandlers;
 }
 
 }  // namespace GCMidi

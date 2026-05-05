@@ -10,6 +10,7 @@ find_package(Boost REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 
 set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ImGui implementation in DPF-Widgets
 set(IMGUI_WIDGET_SRC

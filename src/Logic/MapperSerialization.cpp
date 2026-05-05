@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <nlohmann/json.hpp>
 #include <unordered_map>
@@ -8,6 +9,25 @@
 namespace MapperConfig {
 
 using json = nlohmann::json;
+
+int readClampedInt(const json& j, const char* key, int fallback, int minValue, int maxValue) {
+    if (!j.contains(key)) {
+        return fallback;
+    }
+    return std::clamp(j.at(key).get<int>(), minValue, maxValue);
+}
+
+float readClampedFloat(const json& j, const char* key, float fallback, float minValue, float maxValue) {
+    if (!j.contains(key)) {
+        return fallback;
+    }
+
+    float value = j.at(key).get<float>();
+    if (!std::isfinite(value)) {
+        return fallback;
+    }
+    return std::clamp(value, minValue, maxValue);
+}
 
 // Helper: Button name to SDL constant mapping
 int buttonNameToIndex(std::string_view name) {
@@ -166,23 +186,25 @@ json serializeButtonConfig(const ButtonConfig& cfg) {
 // Deserialize ButtonConfig from JSON
 void parseButtonConfig(const json& j, ButtonConfig& config) {
     config.mode = parseButtonMode(j.value("mode", "none"));
-    config.noteOrCC = j.value("note", j.value("cc", 60));
-    config.velocity = j.value("velocity", 100);
+    config.noteOrCC = static_cast<uint8_t>(j.contains("note")
+                                               ? readClampedInt(j, "note", 60, 0, 127)
+                                               : readClampedInt(j, "cc", 60, 0, 127));
+    config.velocity = static_cast<uint8_t>(readClampedInt(j, "velocity", 100, 0, 127));
 
     if (j.contains("intervals")) {
         const auto& intervals = j["intervals"];
         config.intervalCount = std::min(intervals.size(), MAX_CHORD_INTERVALS);
         for (size_t i = 0; i < config.intervalCount; ++i) {
-            config.chordIntervals[i] = intervals[i].get<int8_t>();
+            config.chordIntervals[i] = static_cast<int8_t>(std::clamp(intervals[i].get<int>(), -24, 24));
         }
     }
 
     if (j.contains("chordOctaveOffset")) {
-        config.chordOctaveOffset = std::clamp(j["chordOctaveOffset"].get<int>(), -4, 4);
+        config.chordOctaveOffset = static_cast<int8_t>(readClampedInt(j, "chordOctaveOffset", 0, -4, 4));
     }
 
     if (j.contains("shiftButton")) {
-        config.shiftButton = j["shiftButton"].get<int8_t>();
+        config.shiftButton = static_cast<int8_t>(readClampedInt(j, "shiftButton", -1, -1, SDL_CONTROLLER_BUTTON_MAX - 1));
     }
 }
 
@@ -200,10 +222,10 @@ json serializeAxisConfig(const AxisConfig& cfg) {
 // Deserialize AxisConfig from JSON
 void parseAxisConfig(const json& j, AxisConfig& config) {
     config.mode = parseAxisMode(j.value("mode", "none"));
-    config.ccNumber = j.value("cc", 0);
+    config.ccNumber = static_cast<uint8_t>(readClampedInt(j, "cc", 0, 0, 127));
     config.isBipolar = j.value("bipolar", true);
     config.isInverted = j.value("inverted", false);
-    config.deadzone = j.value("deadzone", 0.1f);
+    config.deadzone = readClampedFloat(j, "deadzone", 0.1f, 0.0f, 1.0f);
 }
 
 std::string serializePreset(const MapperPreset& preset) {
@@ -265,9 +287,9 @@ bool deserializePreset(const std::string& jsonStr, MapperPreset& preset) {
         std::memset(preset.name.data(), 0, preset.name.size());
         std::copy_n(name.begin(), std::min(name.size(), preset.name.size() - 1), preset.name.begin());
 
-        preset.channel = j.value("channel", 0);
-        preset.baseOctaveOffset = j.value("baseOctaveOffset", 0);
-        preset.shiftButton = j.value("shiftButton", static_cast<uint8_t>(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER));
+        preset.channel = static_cast<uint8_t>(readClampedInt(j, "channel", 0, 0, 15));
+        preset.baseOctaveOffset = static_cast<int8_t>(readClampedInt(j, "baseOctaveOffset", 0, -4, 4));
+        preset.shiftButton = static_cast<uint8_t>(readClampedInt(j, "shiftButton", SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, 0, SDL_CONTROLLER_BUTTON_MAX - 1));
 
         if (j.contains("shiftButtonName")) {
             int idx = buttonNameToIndex(j["shiftButtonName"].get<std::string>());

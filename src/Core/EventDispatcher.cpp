@@ -1,12 +1,18 @@
 #include "EventDispatcher.hpp"
 
+#include <algorithm>
+
 namespace GCMidi {
 
 EventDispatcher::EventDispatcher()
     : fMidiQueue(1024),  // Increased from 256 to handle high-frequency axis events
+      fPriorityNoteOffQueue(128),
       fControllerConnected(false),
       fTriggerOctaveOffset(0),
-      fOctaveDirty(false) {
+      fBaseOctaveOffset(0),
+      fRequestedBaseOctaveOffset(0),
+      fBaseOctaveRequestPending(false),
+      fBaseOctaveDirty(false) {
     for (int i = 0; i < SDL_CONTROLLER_BUTTON_MAX; ++i) {
         fButtonStates[i].store(false, std::memory_order_relaxed);
     }
@@ -27,15 +33,23 @@ void EventDispatcher::onControllerConnected(const char* name) {
 }
 
 void EventDispatcher::onControllerDisconnected() {
-    std::lock_guard<std::mutex> lock(fStateMutex);
-    fControllerConnected.store(false, std::memory_order_relaxed);
-    fControllerName.clear();
-    for (int i = 0; i < SDL_CONTROLLER_BUTTON_MAX; ++i) {
-        fButtonStates[i].store(false, std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> lock(fStateMutex);
+        fControllerConnected.store(false, std::memory_order_relaxed);
+        fControllerName.clear();
+        for (int i = 0; i < SDL_CONTROLLER_BUTTON_MAX; ++i) {
+            fButtonStates[i].store(false, std::memory_order_relaxed);
+        }
+        fTriggerOctaveOffset.store(0, std::memory_order_relaxed);
+        fLeftTriggerPressed = false;
+        fRightTriggerPressed = false;
     }
-    fTriggerOctaveOffset.store(0, std::memory_order_relaxed);
-    fLeftTriggerPressed = false;
-    fRightTriggerPressed = false;
+
+    std::lock_guard<std::mutex> mapperLock(fMapperMutex);
+    if (fMapper) {
+        fMapper->flushActiveNotes(*this);
+        fMapper->setTriggerOctaveOffset(0);
+    }
 }
 
 void EventDispatcher::onControllerButton(uint8_t button, bool pressed, bool shiftState) {
@@ -43,11 +57,16 @@ void EventDispatcher::onControllerButton(uint8_t button, bool pressed, bool shif
         fButtonStates[button].store(pressed, std::memory_order_relaxed);
     }
 
+    std::lock_guard<std::mutex> lock(fMapperMutex);
     if (fMapper) {
+        applyPendingBaseOctaveOffsetLocked();
         int oldOctave = fMapper->getOctaveOffset();
-        fMapper->onButton(button, pressed, shiftState, fMidiQueue);
-        if (oldOctave != fMapper->getOctaveOffset()) {
-            fOctaveDirty.store(true, std::memory_order_relaxed);
+        fMapper->onButton(button, pressed, shiftState, *this);
+        int newOctave = fMapper->getOctaveOffset();
+        if (oldOctave != newOctave) {
+            fBaseOctaveOffset.store(static_cast<int8_t>(newOctave), std::memory_order_relaxed);
+            fRequestedBaseOctaveOffset.store(static_cast<int8_t>(newOctave), std::memory_order_relaxed);
+            fBaseOctaveDirty.store(true, std::memory_order_relaxed);
         }
     }
 }
@@ -61,10 +80,10 @@ void EventDispatcher::onControllerAxis(uint8_t axis, int16_t value, bool shiftSt
             int8_t current = fTriggerOctaveOffset.load(std::memory_order_relaxed);
             int8_t next = static_cast<int8_t>(std::max(-4, current - 1));
             fTriggerOctaveOffset.store(next, std::memory_order_relaxed);
+            std::lock_guard<std::mutex> lock(fMapperMutex);
             if (fMapper) {
                 fMapper->setTriggerOctaveOffset(next);
             }
-            fOctaveDirty.store(true, std::memory_order_relaxed);
         }
         fLeftTriggerPressed = pressed;
         return;  // Don't forward to mapper
@@ -77,21 +96,24 @@ void EventDispatcher::onControllerAxis(uint8_t axis, int16_t value, bool shiftSt
             int8_t current = fTriggerOctaveOffset.load(std::memory_order_relaxed);
             int8_t next = static_cast<int8_t>(std::min(4, current + 1));
             fTriggerOctaveOffset.store(next, std::memory_order_relaxed);
+            std::lock_guard<std::mutex> lock(fMapperMutex);
             if (fMapper) {
                 fMapper->setTriggerOctaveOffset(next);
             }
-            fOctaveDirty.store(true, std::memory_order_relaxed);
         }
         fRightTriggerPressed = pressed;
         return;
     }
 
+    std::lock_guard<std::mutex> lock(fMapperMutex);
     if (fMapper) {
-        fMapper->onAxis(axis, value, shiftState, fMidiQueue);
+        applyPendingBaseOctaveOffsetLocked();
+        fMapper->onAxis(axis, value, shiftState, *this);
     }
 }
 
 uint8_t EventDispatcher::getShiftButton() const {
+    std::lock_guard<std::mutex> lock(fMapperMutex);
     if (fMapper) {
         return fMapper->getShiftButton();
     }
@@ -99,6 +121,7 @@ uint8_t EventDispatcher::getShiftButton() const {
 }
 
 uint8_t EventDispatcher::getShiftButtonForButton(uint8_t button) const {
+    std::lock_guard<std::mutex> lock(fMapperMutex);
     if (fMapper) {
         return fMapper->getShiftButtonForButton(button);
     }
@@ -106,7 +129,29 @@ uint8_t EventDispatcher::getShiftButtonForButton(uint8_t button) const {
 }
 
 bool EventDispatcher::popMidi(RawMidi& outEv) {
+    if (fPriorityNoteOffQueue.pop(outEv)) {
+        return true;
+    }
     return fMidiQueue.pop(outEv);
+}
+
+bool EventDispatcher::pushMidi(const RawMidi& midi) {
+    if (isNoteOff(midi)) {
+        if (fPriorityNoteOffQueue.push(midi) || fMidiQueue.push(midi)) {
+            return true;
+        }
+
+        fDroppedMidiEvents.fetch_add(1, std::memory_order_relaxed);
+        fDroppedNoteOffEvents.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+
+    if (fMidiQueue.push(midi)) {
+        return true;
+    }
+
+    fDroppedMidiEvents.fetch_add(1, std::memory_order_relaxed);
+    return false;
 }
 
 // Called by UI Thread
@@ -123,20 +168,39 @@ bool EventDispatcher::getButtonState(uint8_t button) const {
     return button < SDL_CONTROLLER_BUTTON_MAX ? fButtonStates[button].load(std::memory_order_relaxed) : false;
 }
 
-IMidiMapper* EventDispatcher::getMapper() {
-    return fMapper.get();
-}
-
 void EventDispatcher::setMapper(std::unique_ptr<IMidiMapper> mapper) {
-    std::lock_guard<std::mutex> lock(fStateMutex);
+    std::lock_guard<std::mutex> lock(fMapperMutex);
+    if (fMapper) {
+        if (!fMapper->flushActiveNotes(*this)) {
+            return;
+        }
+    }
+    const int oldBaseOctave = fBaseOctaveOffset.load(std::memory_order_relaxed);
     fMapper = std::move(mapper);
     if (fMapper) {
         fMapper->setTriggerOctaveOffset(fTriggerOctaveOffset.load(std::memory_order_relaxed));
+        const int newBaseOctave = fMapper->getOctaveOffset();
+        fBaseOctaveOffset.store(static_cast<int8_t>(newBaseOctave), std::memory_order_relaxed);
+        fRequestedBaseOctaveOffset.store(static_cast<int8_t>(newBaseOctave), std::memory_order_relaxed);
+        if (oldBaseOctave != newBaseOctave) {
+            fBaseOctaveDirty.store(true, std::memory_order_relaxed);
+        }
     }
 }
 
-bool EventDispatcher::getAndResetOctaveDirty() {
-    return fOctaveDirty.exchange(false);
+bool EventDispatcher::getAndResetBaseOctaveDirty() {
+    return fBaseOctaveDirty.exchange(false);
+}
+
+int EventDispatcher::getBaseOctaveOffset() const {
+    return fBaseOctaveOffset.load(std::memory_order_relaxed);
+}
+
+void EventDispatcher::requestBaseOctaveOffset(int offset) {
+    const int8_t clamped = static_cast<int8_t>(std::clamp(offset, -4, 4));
+    fBaseOctaveOffset.store(clamped, std::memory_order_relaxed);
+    fRequestedBaseOctaveOffset.store(clamped, std::memory_order_relaxed);
+    fBaseOctaveRequestPending.store(true, std::memory_order_release);
 }
 
 int8_t EventDispatcher::getTriggerOctaveOffset() const {
@@ -144,10 +208,51 @@ int8_t EventDispatcher::getTriggerOctaveOffset() const {
 }
 
 void EventDispatcher::setTriggerOctaveOffset(int8_t offset) {
-    fTriggerOctaveOffset.store(offset, std::memory_order_relaxed);
+    const int8_t clamped = std::clamp(offset, int8_t(-4), int8_t(4));
+    fTriggerOctaveOffset.store(clamped, std::memory_order_relaxed);
+    std::lock_guard<std::mutex> lock(fMapperMutex);
     if (fMapper) {
-        fMapper->setTriggerOctaveOffset(offset);
+        fMapper->setTriggerOctaveOffset(clamped);
     }
+}
+
+void EventDispatcher::deactivate() {
+    std::lock_guard<std::mutex> lock(fMapperMutex);
+    clearMapperRuntimeStateLocked();
+}
+
+uint64_t EventDispatcher::getDroppedMidiEventCount() const {
+    return fDroppedMidiEvents.load(std::memory_order_relaxed);
+}
+
+uint64_t EventDispatcher::getDroppedNoteOffCount() const {
+    return fDroppedNoteOffEvents.load(std::memory_order_relaxed);
+}
+
+void EventDispatcher::applyPendingBaseOctaveOffsetLocked() {
+    if (!fBaseOctaveRequestPending.exchange(false, std::memory_order_acquire)) {
+        return;
+    }
+
+    const int8_t requested = fRequestedBaseOctaveOffset.load(std::memory_order_relaxed);
+    if (fMapper) {
+        fMapper->setOctaveOffset(requested);
+    }
+}
+
+void EventDispatcher::clearMapperRuntimeStateLocked() {
+    if (fMapper) {
+        fMapper->flushActiveNotes(*this);
+    }
+}
+
+bool EventDispatcher::isNoteOff(const RawMidi& midi) {
+    if (midi.size < 3) {
+        return false;
+    }
+
+    const uint8_t status = midi.data[0] & 0xF0;
+    return status == 0x80 || (status == 0x90 && midi.data[2] == 0);
 }
 
 }  // namespace GCMidi

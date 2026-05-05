@@ -3,7 +3,6 @@
 
 #include <SDL.h>
 
-#include <boost/lockfree/queue.hpp>
 #include <cstdint>
 
 #include "Common/MidiTypes.hpp"
@@ -19,10 +18,13 @@ public:
     virtual const char* getName() const = 0;
 
     // Process a button event and push generated MIDI to the queue
-    virtual void onButton(uint8_t button, bool pressed, bool shiftState, boost::lockfree::queue<RawMidi>& outQueue) = 0;
+    virtual void onButton(uint8_t button, bool pressed, bool shiftState, IMidiOutputSink& out) = 0;
 
     // Process an axis event (analog sticks, triggers)
-    virtual void onAxis(uint8_t axis, int16_t value, bool shiftState, boost::lockfree::queue<RawMidi>& outQueue) = 0;
+    virtual void onAxis(uint8_t axis, int16_t value, bool shiftState, IMidiOutputSink& out) = 0;
+
+    // Emit Note Off for any notes currently held by this mapper.
+    virtual bool flushActiveNotes(IMidiOutputSink& out) = 0;
 
     // Get current octave offset for UI display
     virtual int getOctaveOffset() const {

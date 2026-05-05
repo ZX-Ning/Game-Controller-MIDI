@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <boost/lockfree/queue.hpp>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -18,7 +19,7 @@ namespace GCMidi {
 // Trigger threshold for octave control (50% of max trigger value)
 inline constexpr int16_t TRIGGER_THRESHOLD = 16384;
 
-class EventDispatcher : public IControllerEventHandler {
+class EventDispatcher : public IControllerEventHandler, public IMidiOutputSink {
 public:
     EventDispatcher();
     ~EventDispatcher() override;
@@ -38,29 +39,27 @@ public:
     bool isConnected() const;
     std::string getControllerName() const;
     bool getButtonState(uint8_t button) const;
-    IMidiMapper* getMapper();
+    bool pushMidi(const RawMidi& midi) override;
 
-    /**
-     * Set the MIDI mapper.
-     *
-     * IMPORTANT: This method is NOT fully thread-safe for dynamic switching.
-     * It should only be called during initialization (before SDL events start)
-     * or from the same thread that calls onControllerButton/onControllerAxis.
-     *
-     * For dynamic mapper switching during playback, a lock-free mechanism
-     * or atomic shared_ptr would be required.
-     */
     void setMapper(std::unique_ptr<IMidiMapper> mapper);
 
-    bool getAndResetOctaveDirty();
+    bool getAndResetBaseOctaveDirty();
 
     // Trigger octave offset for melody transposition
+    int getBaseOctaveOffset() const;
+    void requestBaseOctaveOffset(int offset);
     int8_t getTriggerOctaveOffset() const;
     void setTriggerOctaveOffset(int8_t offset);
+    void deactivate();
+
+    uint64_t getDroppedMidiEventCount() const;
+    uint64_t getDroppedNoteOffCount() const;
 
 private:
     std::unique_ptr<IMidiMapper> fMapper;
+    mutable std::mutex fMapperMutex;
     boost::lockfree::queue<RawMidi> fMidiQueue;
+    boost::lockfree::queue<RawMidi> fPriorityNoteOffQueue;
 
     // UI State variables
     std::atomic<bool> fControllerConnected;
@@ -68,14 +67,23 @@ private:
     std::atomic<bool> fButtonStates[SDL_CONTROLLER_BUTTON_MAX];
 
     std::atomic<int8_t> fTriggerOctaveOffset{0};
+    std::atomic<int8_t> fBaseOctaveOffset{0};
+    std::atomic<int8_t> fRequestedBaseOctaveOffset{0};
+    std::atomic<bool> fBaseOctaveRequestPending{false};
     bool fLeftTriggerPressed = false;
     bool fRightTriggerPressed = false;
 
-    std::atomic<bool> fOctaveDirty;
+    std::atomic<bool> fBaseOctaveDirty;
+    std::atomic<uint64_t> fDroppedMidiEvents{0};
+    std::atomic<uint64_t> fDroppedNoteOffEvents{0};
 
     // Mutex to protect UI state and mapper access across threads if needed
     // However, for single-instance button states and name, we can use simple atomics or just assume UI thread reads are fine
     mutable std::mutex fStateMutex;
+
+    void applyPendingBaseOctaveOffsetLocked();
+    void clearMapperRuntimeStateLocked();
+    static bool isNoteOff(const RawMidi& midi);
 };
 
 }  // namespace GCMidi

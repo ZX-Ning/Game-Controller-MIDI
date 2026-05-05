@@ -74,6 +74,7 @@ protected:
      * Process */
 
     void activate() override {}
+    void deactivate() override;
     void run(const float** inputs, float** outputs, uint32_t frames, const MidiEvent* midiEvents, uint32_t midiEventCount) override;
 
 public:
@@ -87,7 +88,6 @@ public:
     mutable std::mutex fConfigMutex;
 
     // Runtime state
-    std::atomic<int8_t> fTriggerOctaveOffset{0};  // Cumulative LT/RT offset
     std::atomic<bool> fPlayMode{true};            // true = Play, false = Edit
     std::atomic<uint32_t> fWidth{1000};
     std::atomic<uint32_t> fHeight{500};
@@ -97,6 +97,8 @@ public:
 
 private:
     static std::atomic<int> sInstanceCount;
+    bool fHasPendingMidiOutput = false;
+    GCMidi::RawMidi fPendingMidiOutput{};
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GameControllerMIDIPlugin)
 };

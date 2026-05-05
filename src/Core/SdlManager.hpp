@@ -3,6 +3,7 @@
 
 #include <SDL.h>
 
+#include <array>
 #include <atomic>
 #include <mutex>
 #include <thread>
@@ -11,6 +12,8 @@
 
 namespace GCMidi {
 
+inline constexpr size_t MAX_SDL_EVENT_HANDLERS = 8;
+
 // Global SDL Manager to handle lifecycle and event polling
 class SdlManager {
 public:
@@ -18,6 +21,7 @@ public:
 
     // Set the event handler. Pass nullptr to unregister.
     void setEventHandler(IControllerEventHandler* handler);
+    void clearEventHandler(IControllerEventHandler* handler);
 
 private:
     SdlManager();
@@ -32,12 +36,15 @@ private:
     void handleControllerRemoved(const SDL_ControllerDeviceEvent& event);
     void handleControllerButton(const SDL_ControllerButtonEvent& event);
     void handleControllerAxis(const SDL_ControllerAxisEvent& event);
+    bool hasHandlersLocked() const;
+    std::array<IControllerEventHandler*, MAX_SDL_EVENT_HANDLERS> getHandlerSnapshotLocked() const;
 
     std::mutex fMutex;
     std::thread fThread;
     std::atomic<bool> fRunning;
     SDL_GameController* fController;
-    IControllerEventHandler* fHandler;
+    std::array<IControllerEventHandler*, MAX_SDL_EVENT_HANDLERS> fHandlers{};
+    bool fSdlInitialized = false;
 };
 
 }  // namespace GCMidi
