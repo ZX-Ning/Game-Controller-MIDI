@@ -25,7 +25,6 @@ Defined in `src/Logic/MapperConfig.hpp` as `MapperConfig::AxisMode`:
 | `None` | No action | — | — |
 | `CC` | Control Change | CC message | 0-127 (7-bit) |
 | `PitchBend` | Pitch Bend | Pitch Bend message | 0-16383 (14-bit) |
-| `Aftertouch` | Channel Aftertouch | Aftertouch message | 0-127 (7-bit) |
 
 ## Button Name Mappings
 
@@ -120,11 +119,6 @@ Use these names in JSON presets under the `axes` object:
       "mode": "pitchbend",
       "bipolar": true,
       "deadzone": 0.1
-    },
-    "rightx": {
-      "mode": "aftertouch",
-      "bipolar": false,
-      "deadzone": 0.05
     }
   }
 }
@@ -160,7 +154,7 @@ Use these names in JSON presets under the `axes` object:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `mode` | string | `"cc"`, `"pitchbend"`, `"aftertouch"` |
+| `mode` | string | `"cc"`, `"pitchbend"` |
 | `cc` | int (0-127) | CC number (required for `cc` mode) |
 | `bipolar` | bool | If true, center = 0, extremes = ±max. If false, 0 to max. |
 | `deadzone` | float (0-1) | Dead zone around center (default: 0.1) |

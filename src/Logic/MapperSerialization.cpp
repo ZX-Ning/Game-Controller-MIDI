@@ -142,8 +142,6 @@ const char* axisModeToString(AxisMode mode) {
             return "cc";
         case AxisMode::PitchBend:
             return "pitchbend";
-        case AxisMode::Aftertouch:
-            return "aftertouch";
         default:
             return "none";
     }
@@ -153,8 +151,7 @@ const char* axisModeToString(AxisMode mode) {
 AxisMode parseAxisMode(std::string_view mode) {
     static const std::unordered_map<std::string_view, AxisMode> modeMap = {
         {"cc", AxisMode::CC},
-        {"pitchbend", AxisMode::PitchBend},
-        {"aftertouch", AxisMode::Aftertouch}
+        {"pitchbend", AxisMode::PitchBend}
     };
 
     auto it = modeMap.find(mode);

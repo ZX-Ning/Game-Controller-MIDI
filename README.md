@@ -7,7 +7,7 @@ Audio plugin (VST3/CLAP/VST2) that translates game controller inputs into MIDI m
 ## Features
 
 - **Button-to-MIDI mapping**: Notes, chords, CC (momentary/toggle), octave shifts
-- **Axis-to-MIDI mapping**: CC, pitch bend, aftertouch with configurable deadzone
+- **Axis-to-MIDI mapping**: CC and pitch bend with configurable deadzone
 - **Trigger octave control**: LT/RT for real-time octave shifting
 - **Per-button shift keys**: Independent shift modifiers for different button groups
 - **Dual-mode UI**: Play mode for performance, Edit mode for configuration
@@ -38,4 +38,3 @@ See [AGENTS.md](AGENTS.md) for developer guide and [docs/](docs/) for detailed d
 - [nlohmann/json](https://github.com/nlohmann/json) - Preset parsing
 
 ---
-

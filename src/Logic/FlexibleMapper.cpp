@@ -34,7 +34,6 @@ void FlexibleMapper::setPreset(const MapperConfig::MapperPreset& preset) {
     fCCToggleStates.fill(false);
     fLastAxisCCValues.fill(255);  // Force initial send
     fLastAxisPitchBendValues.fill(0xFFFF);
-    fLastAxisAftertouchValues.fill(255);
 }
 
 void FlexibleMapper::onButton(uint8_t button, bool pressed, bool shift, IMidiOutputSink& out) {
@@ -86,25 +85,6 @@ void FlexibleMapper::onAxis(uint8_t axis, int16_t value, bool shift, IMidiOutput
             break;
         case MapperConfig::AxisMode::PitchBend:
             handleAxisPitchBend(config, value, axis, out);
-            break;
-        case MapperConfig::AxisMode::Aftertouch:
-            // Similar to CC but uses aftertouch message
-            {
-                float normalized = normalizeAxis(value, config);
-                uint8_t atValue = static_cast<uint8_t>(normalized * 127.0f);
-
-                // Only send if value changed
-                if (atValue == fLastAxisAftertouchValues[axis]) {
-                    break;
-                }
-                fLastAxisAftertouchValues[axis] = atValue;
-
-                RawMidi midi{};
-                midi.data[0] = 0xD0 | (fPreset.channel & 0x0F);  // Channel Aftertouch
-                midi.data[1] = atValue;
-                midi.size = 2;
-                out.pushMidi(midi);
-            }
             break;
         case MapperConfig::AxisMode::None:
         default:

@@ -30,8 +30,7 @@ enum class ButtonMode : uint8_t {
 enum class AxisMode : uint8_t {
     None,
     CC,         // Control Change (7-bit, 0-127)
-    PitchBend,  // Pitch Bend (14-bit, 0-16383)
-    Aftertouch  // Channel Aftertouch (7-bit, 0-127)
+    PitchBend   // Pitch Bend (14-bit, 0-16383)
 };
 
 /**

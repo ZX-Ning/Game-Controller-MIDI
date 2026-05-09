@@ -42,7 +42,7 @@ public:
     /** Map a button edge to note, chord, or CC MIDI. Serialized by owner. */
     void onButton(uint8_t button, bool pressed, bool shift, IMidiOutputSink& out) override;
 
-    /** Map axis movement to CC, pitch bend, or aftertouch MIDI. */
+    /** Map axis movement to CC or pitch bend MIDI. */
     void onAxis(uint8_t axis, int16_t value, bool shift, IMidiOutputSink& out) override;
 
     /** Emit Note Off for tracked notes; failed sends remain tracked. */
@@ -102,9 +102,6 @@ private:
 
     /** Last sent 14-bit pitch-bend value per axis. */
     std::array<uint16_t, SDL_CONTROLLER_AXIS_MAX> fLastAxisPitchBendValues{};
-
-    /** Last sent 7-bit channel-aftertouch value per axis. */
-    std::array<uint8_t, SDL_CONTROLLER_AXIS_MAX> fLastAxisAftertouchValues{};
 
     /** Emit Note On/Off for single-note button mode. */
     void handleNoteMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, IMidiOutputSink& out);

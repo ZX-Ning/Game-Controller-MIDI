@@ -630,9 +630,9 @@ void GameControllerMIDIUI::renderAxisEditor(int axisIndex, MapperConfig::AxisCon
     ImGui::Text("Editing Axis: %s", getAxisName(axisIndex));
     ImGui::Separator();
 
-    const char* modes[] = {"None", "CC", "PitchBend", "Aftertouch"};
+    const char* modes[] = {"None", "CC", "PitchBend"};
     int modeIndex = static_cast<int>(config.mode);
-    if (ImGui::Combo("Mode", &modeIndex, modes, 4)) {
+    if (ImGui::Combo("Mode", &modeIndex, modes, 3)) {
         config.mode = static_cast<MapperConfig::AxisMode>(modeIndex);
     }
 

@@ -122,7 +122,7 @@ Configurable mapper loaded from JSON presets.
 
 **Features**:
 - Multiple button modes: Note, Chord, CC (momentary/toggle), Octave shifts
-- Multiple axis modes: CC, Pitch Bend, Aftertouch
+- Multiple axis modes: CC and Pitch Bend
 - Per-button shift key support via `buttonShiftKeys` map
 - **Real-time safe**: Fixed-size `std::array` for all collections
 - Axis value caching to reduce redundant MIDI traffic
