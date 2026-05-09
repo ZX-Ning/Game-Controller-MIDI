@@ -11,13 +11,23 @@
 
 START_NAMESPACE_DISTRHO
 
+/**
+ * DPF plugin instance.
+ *
+ * Owns the dispatcher, active preset, host parameters/states, and audio-thread
+ * MIDI output loop. `run()` only drains dispatcher queues and writes MIDI to the
+ * host; JSON parsing, mapper replacement, SDL lifecycle, and config locking all
+ * stay outside the audio callback.
+ */
 class GameControllerMIDIPlugin : public Plugin {
 public:
+    /** Host-visible automatable parameters. */
     enum Parameters {
         kParamOctave = 0,
         kParamCount
     };
 
+    /** Host-persisted state keys; never serialized/deserialized from `run()`. */
     enum States {
         kStateConfig = 0,     // JSON serialized MapperPreset
         kStateTriggerOctave,  // Current trigger octave offset
@@ -27,7 +37,10 @@ public:
         kStateCount
     };
 
+    /** Create dispatcher, load default preset, and register for SDL events. */
     GameControllerMIDIPlugin();
+
+    /** Unregister from SDL and release plugin resources. */
     ~GameControllerMIDIPlugin() override;
 
 protected:
@@ -59,45 +72,64 @@ protected:
     /* ------------------------------------------------------------------
      * Parameters */
 
+    /** Describe one host-visible parameter. */
     void initParameter(uint32_t index, Parameter& parameter) override;
+
+    /** Return current parameter value from atomics/dispatcher state. */
     float getParameterValue(uint32_t index) const override;
+
+    /** Apply parameter changes; octave updates are deferred through dispatcher atomics. */
     void setParameterValue(uint32_t index, float value) override;
 
     /* ------------------------------------------------------------------
      * State */
 
+    /** Describe one host-persisted state entry. */
     void initState(uint32_t index, State& state) override;
+
+    /** Apply persisted/UI state. Config JSON uses `fConfigMutex` and is not real-time safe. */
     void setState(const char* key, const char* value) override;
+
+    /** Serialize current state; may allocate, so never call from audio thread. */
     String getState(const char* key) const override;
 
     /* -----------------------------------------------------------------
      * Process */
 
     void activate() override {}
+
+    /** Flush active mapper notes from the host lifecycle thread. */
     void deactivate() override;
+
+    /** Audio callback: drain lock-free MIDI queues and write host MIDI output. */
     void run(const float** inputs, float** outputs, uint32_t frames, const MidiEvent* midiEvents, uint32_t midiEventCount) override;
 
 public:
-    // Core logic hub
+    // Core logic hub; owns the thread-safe bridge to SDL and audio output.
     std::unique_ptr<GCMidi::EventDispatcher> fDispatcher;
 
-    // Active configuration (used by mapper)
+    // Active preset used to build mapper instances. Guard with `fConfigMutex`.
     MapperConfig::MapperPreset fActiveConfig{};
 
-    // Thread safety for config access
+    // Protects `fActiveConfig`; never take this mutex in `run()`.
     mutable std::mutex fConfigMutex;
 
-    // Runtime state
-    std::atomic<bool> fPlayMode{true};            // true = Play, false = Edit
+    // UI/host state mirrors. Atomics avoid locking for simple reads/writes.
+    std::atomic<bool> fPlayMode{true};  // true = Play, false = Edit
     std::atomic<uint32_t> fWidth{1000};
     std::atomic<uint32_t> fHeight{500};
 
-    // Helper to reload mapper from fActiveConfig
+    /** Rebuild mapper from `fActiveConfig`; may allocate and flush notes. */
     void reloadMapper();
 
 private:
+    /** Process-wide instance count used around global SDL lifecycle assumptions. */
     static std::atomic<int> sInstanceCount;
+
+    /** Audio-thread-owned pending host-output flag. */
     bool fHasPendingMidiOutput = false;
+
+    /** Audio-thread-owned MIDI event retried on the next callback. */
     GCMidi::RawMidi fPendingMidiOutput{};
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GameControllerMIDIPlugin)

@@ -5,9 +5,7 @@
 namespace GCMidi {
 
 EventDispatcher::EventDispatcher()
-    : fMidiQueue(1024),  // Increased from 256 to handle high-frequency axis events
-      fPriorityNoteOffQueue(128),
-      fControllerConnected(false),
+    : fControllerConnected(false),
       fTriggerOctaveOffset(0),
       fBaseOctaveOffset(0),
       fRequestedBaseOctaveOffset(0),
@@ -47,7 +45,7 @@ void EventDispatcher::onControllerDisconnected() {
 
     std::lock_guard<std::mutex> mapperLock(fMapperMutex);
     if (fMapper) {
-        fMapper->flushActiveNotes(*this);
+        fMapper->flushActiveNotes(fMidiEvents);
         fMapper->setTriggerOctaveOffset(0);
     }
 }
@@ -61,7 +59,7 @@ void EventDispatcher::onControllerButton(uint8_t button, bool pressed, bool shif
     if (fMapper) {
         applyPendingBaseOctaveOffsetLocked();
         int oldOctave = fMapper->getOctaveOffset();
-        fMapper->onButton(button, pressed, shiftState, *this);
+        fMapper->onButton(button, pressed, shiftState, fMidiEvents);
         int newOctave = fMapper->getOctaveOffset();
         if (oldOctave != newOctave) {
             fBaseOctaveOffset.store(static_cast<int8_t>(newOctave), std::memory_order_relaxed);
@@ -108,7 +106,7 @@ void EventDispatcher::onControllerAxis(uint8_t axis, int16_t value, bool shiftSt
     std::lock_guard<std::mutex> lock(fMapperMutex);
     if (fMapper) {
         applyPendingBaseOctaveOffsetLocked();
-        fMapper->onAxis(axis, value, shiftState, *this);
+        fMapper->onAxis(axis, value, shiftState, fMidiEvents);
     }
 }
 
@@ -129,29 +127,7 @@ uint8_t EventDispatcher::getShiftButtonForButton(uint8_t button) const {
 }
 
 bool EventDispatcher::popMidi(RawMidi& outEv) {
-    if (fPriorityNoteOffQueue.pop(outEv)) {
-        return true;
-    }
-    return fMidiQueue.pop(outEv);
-}
-
-bool EventDispatcher::pushMidi(const RawMidi& midi) {
-    if (isNoteOff(midi)) {
-        if (fPriorityNoteOffQueue.push(midi) || fMidiQueue.push(midi)) {
-            return true;
-        }
-
-        fDroppedMidiEvents.fetch_add(1, std::memory_order_relaxed);
-        fDroppedNoteOffEvents.fetch_add(1, std::memory_order_relaxed);
-        return false;
-    }
-
-    if (fMidiQueue.push(midi)) {
-        return true;
-    }
-
-    fDroppedMidiEvents.fetch_add(1, std::memory_order_relaxed);
-    return false;
+    return fMidiEvents.popMidi(outEv);
 }
 
 // Called by UI Thread
@@ -171,7 +147,7 @@ bool EventDispatcher::getButtonState(uint8_t button) const {
 void EventDispatcher::setMapper(std::unique_ptr<IMidiMapper> mapper) {
     std::lock_guard<std::mutex> lock(fMapperMutex);
     if (fMapper) {
-        if (!fMapper->flushActiveNotes(*this)) {
+        if (!fMapper->flushActiveNotes(fMidiEvents)) {
             return;
         }
     }
@@ -222,11 +198,11 @@ void EventDispatcher::deactivate() {
 }
 
 uint64_t EventDispatcher::getDroppedMidiEventCount() const {
-    return fDroppedMidiEvents.load(std::memory_order_relaxed);
+    return fMidiEvents.getDroppedMidiEventCount();
 }
 
 uint64_t EventDispatcher::getDroppedNoteOffCount() const {
-    return fDroppedNoteOffEvents.load(std::memory_order_relaxed);
+    return fMidiEvents.getDroppedNoteOffCount();
 }
 
 void EventDispatcher::applyPendingBaseOctaveOffsetLocked() {
@@ -242,17 +218,8 @@ void EventDispatcher::applyPendingBaseOctaveOffsetLocked() {
 
 void EventDispatcher::clearMapperRuntimeStateLocked() {
     if (fMapper) {
-        fMapper->flushActiveNotes(*this);
+        fMapper->flushActiveNotes(fMidiEvents);
     }
-}
-
-bool EventDispatcher::isNoteOff(const RawMidi& midi) {
-    if (midi.size < 3) {
-        return false;
-    }
-
-    const uint8_t status = midi.data[0] & 0xF0;
-    return status == 0x80 || (status == 0x90 && midi.data[2] == 0);
 }
 
 }  // namespace GCMidi

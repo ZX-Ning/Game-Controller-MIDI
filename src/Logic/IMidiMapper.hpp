@@ -9,46 +9,53 @@
 
 namespace GCMidi {
 
-// Interface for translating controller events into MIDI
+/**
+ * Interface for translating controller input into MIDI.
+ *
+ * `EventDispatcher` owns and serializes mapper access with its mapper mutex.
+ * Event methods are called from the SDL polling thread and should avoid
+ * allocation, blocking, and internal locks.
+ */
 class IMidiMapper {
 public:
     virtual ~IMidiMapper() = default;
 
-    // Returns the name of the mapping
+    /** Return a null-terminated mapper or preset name. */
     virtual const char* getName() const = 0;
 
-    // Process a button event and push generated MIDI to the queue
+    /** Process a button event and push generated MIDI to `out`. */
     virtual void onButton(uint8_t button, bool pressed, bool shiftState, IMidiOutputSink& out) = 0;
 
-    // Process an axis event (analog sticks, triggers)
+    /** Process an axis event from analog sticks or triggers. */
     virtual void onAxis(uint8_t axis, int16_t value, bool shiftState, IMidiOutputSink& out) = 0;
 
-    // Emit Note Off for any notes currently held by this mapper.
+    /** Emit Note Off for held notes; failed sends must remain tracked. */
     virtual bool flushActiveNotes(IMidiOutputSink& out) = 0;
 
-    // Get current octave offset for UI display
+    /** Return the base octave offset shown in UI and plugin state. */
     virtual int getOctaveOffset() const {
         return 0;
     }
 
-    // Set octave offset (e.g. from plugin parameters)
+    /** Set the base octave offset. */
     virtual void setOctaveOffset(int offset) = 0;
 
-    // Trigger octave offset (LT/RT cumulative)
+    /** Return the transient LT/RT trigger octave offset. */
     virtual int8_t getTriggerOctaveOffset() const {
         return 0;
     }
+
+    /** Set the transient LT/RT trigger octave offset. */
     virtual void setTriggerOctaveOffset(int8_t offset) {
         (void)offset;
     }
 
-    // Get the button index used as shift modifier (default: right shoulder)
+    /** Return the global SDL button used as shift modifier. */
     virtual uint8_t getShiftButton() const {
         return SDL_CONTROLLER_BUTTON_RIGHTSHOULDER;
     }
 
-    // Get the shift button for a specific button (per-button shift support)
-    // Default implementation: fall back to global shift
+    /** Return a per-button shift override, or the global shift button. */
     virtual uint8_t getShiftButtonForButton(uint8_t button) const {
         (void)button;  // Suppress unused parameter warning
         return getShiftButton();

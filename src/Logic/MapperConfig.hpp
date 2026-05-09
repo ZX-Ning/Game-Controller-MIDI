@@ -15,6 +15,7 @@ inline constexpr size_t MAX_CHORD_INTERVALS = 6;
 // Maximum active notes per button (same as chord size)
 inline constexpr size_t MAX_ACTIVE_NOTES = MAX_CHORD_INTERVALS;
 
+/** Button mapping mode stored in presets. */
 enum class ButtonMode : uint8_t {
     None,
     Note,          // Single MIDI note
@@ -25,6 +26,7 @@ enum class ButtonMode : uint8_t {
     OctaveDown     // DEPRECATED: Use trigger octave control instead
 };
 
+/** Axis mapping mode stored in presets. */
 enum class AxisMode : uint8_t {
     None,
     CC,         // Control Change (7-bit, 0-127)
@@ -32,6 +34,10 @@ enum class AxisMode : uint8_t {
     Aftertouch  // Channel Aftertouch (7-bit, 0-127)
 };
 
+/**
+ * Configuration for one controller button in a normal or shift layer.
+ * Fixed-size chord storage keeps mapper event handling allocation-free.
+ */
 struct ButtonConfig {
     ButtonMode mode = ButtonMode::None;
     uint8_t noteOrCC = 60;                                     // Base note (MIDI number) or CC number
@@ -49,6 +55,10 @@ struct ButtonConfig {
     int8_t chordOctaveOffset = 0;  // Range: -4 to +4
 };
 
+/**
+ * Configuration for one controller axis in a normal or shift layer, including
+ * MIDI output mode and axis normalization.
+ */
 struct AxisConfig {
     AxisMode mode = AxisMode::None;
     uint8_t ccNumber = 0;     // CC number (for CC mode)
@@ -57,6 +67,10 @@ struct AxisConfig {
     float deadzone = 0.1f;    // Deadzone as fraction (0.0 to 1.0)
 };
 
+/**
+ * Complete serializable mapper preset. UI/host code edits and serializes this
+ * outside the audio thread; `FlexibleMapper` copies it into mapper-owned state.
+ */
 struct MapperPreset {
     std::array<char, 64> name{};  // Preset name (null-terminated)
     uint8_t channel = 0;          // MIDI channel (0-15)
@@ -69,8 +83,10 @@ struct MapperPreset {
     std::array<AxisConfig, SDL_CONTROLLER_AXIS_MAX> shiftAxes{};  // When shift is held
 };
 
-// Serialization support
+/** Serialize a preset to JSON for plugin state or file export. Not real-time safe. */
 std::string serializePreset(const MapperPreset& preset);
+
+/** Parse JSON into a preset, preserving defaults where fields are absent. Not real-time safe. */
 bool deserializePreset(const std::string& json, MapperPreset& preset);
 
 }  // namespace MapperConfig

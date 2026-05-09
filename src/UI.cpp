@@ -26,14 +26,23 @@
 
 START_NAMESPACE_DISTRHO
 
+/**
+ * Dear ImGui editor and performance display for one plugin instance.
+ *
+ * All fields are UI-thread-owned. `fDraftConfig` is copied to/from the plugin's
+ * active config under `GameControllerMIDIPlugin::fConfigMutex`; file I/O and
+ * JSON work stay on the UI thread and must never move into `run()`.
+ */
 class GameControllerMIDIUI : public UI {
 public:
+    /** Create the UI at its default size and install minimum geometry limits. */
     GameControllerMIDIUI()
         : UI(1000, 500) {
         setGeometryConstraints(1000, 500);  // Set minimum size
     }
 
 protected:
+    /** Render one ImGui frame, including mode selection and toast overlay. */
     void onImGuiDisplay() override {
         const float width = getWidth();
         const float height = getHeight();
@@ -82,10 +91,12 @@ protected:
         }
     }
 
+    /** Repaint when the host reports a parameter change. */
     void parameterChanged(uint32_t, float) override {
         repaint();
     }
 
+    /** Mirror host/plugin state changes into local mode and window size. */
     void stateChanged(const char* key, const char* value) override {
         if (std::strcmp(key, "editMode") == 0) {
             fIsEditMode = (std::strcmp(value, "true") == 0);
@@ -104,6 +115,7 @@ protected:
         }
     }
 
+    /** Persist resized UI dimensions back to plugin state. */
     void onResize(const ResizeEvent& ev) override {
         UI::onResize(ev);  // Update ImGui DisplaySize
 
@@ -115,49 +127,80 @@ protected:
     }
 
 private:
-    // Edit mode state
+    /** Current UI mode, mirrored through the `"editMode"` state key. */
     bool fIsEditMode = false;
+
+    /** Editable preset copy used while in Edit mode. */
     MapperConfig::MapperPreset fDraftConfig{};  // Draft copy
 
-    // Selected item for editing
+    /** Selected SDL button in the editor, or -1 when none is selected. */
     int fSelectedButton = -1;
+
+    /** Selected SDL axis in the editor, or -1 when none is selected. */
     int fSelectedAxis = -1;
+
+    /** Selects whether the editor targets the normal or shift layer. */
     bool fEditingShiftButton = false;
 
-    // File browser state
+    /** File-browser operation waiting for a selected path. */
     enum class FileBrowserMode {
         None,
         Import,
         Export
     };
+
+    /** Current pending file-browser mode. */
     FileBrowserMode fFileBrowserMode = FileBrowserMode::None;
 
-    // Toast notification
+    /** Whether the transient toast notification is visible. */
     bool fShowToast = false;
+
+    /** Toast notification text. */
     std::string fToastMessage;
+
+    /** Remaining toast display time in seconds. */
     float fToastTimer = 0.0f;
 
-    // Helper methods
+    /** Render Play mode status and controller visualization. */
     void renderPlayModeUI(GameControllerMIDIPlugin* plugin);
+
+    /** Render preset editor and import/export/apply/reset actions. */
     void renderEditModeUI(GameControllerMIDIPlugin* plugin);
 
+    /** Render the button list for one layer and the selected button editor. */
     void renderButtonListEditor(std::array<MapperConfig::ButtonConfig, SDL_CONTROLLER_BUTTON_MAX>& buttons, bool isShift);
+
+    /** Render controls for one button mapping. */
     void renderButtonEditor(int buttonIndex, MapperConfig::ButtonConfig& config);
 
+    /** Render the axis list for one layer and the selected axis editor. */
     void renderAxisListEditor(std::array<MapperConfig::AxisConfig, SDL_CONTROLLER_AXIS_MAX>& axes, bool isShift);
+
+    /** Render controls for one axis mapping. */
     void renderAxisEditor(int axisIndex, MapperConfig::AxisConfig& config);
 
+    /** Render fixed-size chord interval editing controls. */
     void renderChordIntervalEditor(MapperConfig::ButtonConfig& config);
 
+    /** Copy active plugin config into `fDraftConfig` under `fConfigMutex`. */
     void loadDraftFromActive(GameControllerMIDIPlugin* plugin);
+
+    /** Commit draft config, reload mapper outside the config lock, and persist JSON. */
     void applyDraftToActive(GameControllerMIDIPlugin* plugin);
 
+    /** Open a file picker to import a JSON preset into the draft config. */
     void importConfig();
+
+    /** Open a file picker to export the current draft preset as JSON. */
     void exportConfig();
+
+    /** Show a transient UI notification. */
     void showToast(const std::string& message, float duration = 3.0f);
 
+    /** Handle file-browser import/export result. Performs file I/O on UI thread. */
     void uiFileBrowserSelected(const char* filename) override;
 
+    /** Return a human-readable SDL button name for UI labels. */
     const char* getButtonName(int button) {
         if (button < 0 || button >= SDL_CONTROLLER_BUTTON_MAX) {
             return "None";
@@ -166,6 +209,7 @@ private:
         return name ? name : "Unknown";
     }
 
+    /** Return a human-readable SDL axis name for UI labels. */
     const char* getAxisName(int axis) {
         if (axis < 0 || axis >= SDL_CONTROLLER_AXIS_MAX) {
             return "None";

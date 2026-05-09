@@ -27,6 +27,7 @@ dpf_add_plugin(GameControllerMIDI
         src/Plugin.cpp
         src/Core/SdlManager.cpp
         src/Core/EventDispatcher.cpp
+        src/Core/MidiEventQueue.cpp
         src/Logic/FlexibleMapper.cpp
         src/Logic/MapperSerialization.cpp
     FILES_UI
