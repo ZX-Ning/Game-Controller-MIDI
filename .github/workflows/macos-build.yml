@@ -43,7 +43,7 @@ jobs:
           clang++ --version
 
       - name: Cache vcpkg binary packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/vcpkg-cache
           key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
@@ -72,7 +72,7 @@ jobs:
         run: find build -maxdepth 4 -type f -o -type d | sort | sed -n '1,200p'
 
       - name: Upload plugin artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: GameControllerMIDI-macos-${{ matrix.arch }}
           path: |

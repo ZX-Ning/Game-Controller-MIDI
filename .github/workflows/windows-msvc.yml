@@ -9,7 +9,7 @@ jobs:
     runs-on: windows-latest
 
     env:
-      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+      VCPKG_DIR: ${{ github.workspace }}\vcpkg
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
       VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}\\vcpkg-cache,readwrite"
 
@@ -26,17 +26,31 @@ jobs:
           path: vcpkg
           fetch-depth: 1
 
+      - name: Checkout Khronos OpenGL Registry
+        uses: actions/checkout@v5
+        with:
+          repository: KhronosGroup/OpenGL-Registry
+          path: third_party/khronos/OpenGL-Registry
+          fetch-depth: 1
+
+      - name: Checkout Khronos EGL Registry
+        uses: actions/checkout@v5
+        with:
+          repository: KhronosGroup/EGL-Registry
+          path: third_party/khronos/EGL-Registry
+          fetch-depth: 1
+
       - name: Set up MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
       - name: Check Ninja
-        shell: pwsh
+        shell: cmd
         run: ninja --version
 
       - name: Cache vcpkg binary packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}\vcpkg-cache
           key: vcpkg-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ hashFiles('vcpkg.json') }}
@@ -44,28 +58,38 @@ jobs:
             vcpkg-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-
 
       - name: Bootstrap vcpkg
-        shell: pwsh
-        run: '& "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics'
+        shell: cmd
+        run: call "%VCPKG_DIR%\bootstrap-vcpkg.bat" -disableMetrics
 
-      - name: Configure
+      - name: Prepare Khronos OpenGL headers
         shell: pwsh
         run: |
-          cmake -S . -B build -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET="$env:VCPKG_DEFAULT_TRIPLET" `
+          New-Item -ItemType Directory -Force third_party/DPF/khronos/GL, third_party/DPF/khronos/KHR | Out-Null
+          Copy-Item third_party/khronos/OpenGL-Registry/api/GL/glext.h third_party/DPF/khronos/GL/glext.h
+          Copy-Item third_party/khronos/EGL-Registry/api/KHR/khrplatform.h third_party/DPF/khronos/KHR/khrplatform.h
+          if (-not (Select-String -Path "third_party/DPF/khronos/GL/glext.h" -Pattern "PFNGLACTIVETEXTUREPROC" -Quiet)) {
+            throw "Prepared glext.h does not contain OpenGL extension function typedefs."
+          }
+
+      - name: Configure
+        shell: cmd
+        run: |
+          cmake -S . -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_DIR%\scripts\buildsystems\vcpkg.cmake" ^
+            -DVCPKG_TARGET_TRIPLET="%VCPKG_DEFAULT_TRIPLET%" ^
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
-        shell: pwsh
+        shell: cmd
         run: cmake --build build --config Release --parallel
 
       - name: Test
-        shell: pwsh
+        shell: cmd
         run: ctest --test-dir build --build-config Release --output-on-failure
 
       - name: Upload plugin artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: GameControllerMIDI-windows-msvc
           path: |
