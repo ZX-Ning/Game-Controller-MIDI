@@ -72,6 +72,8 @@ add_executable(GameControllerMIDI_core_tests
 
 target_compile_features(GameControllerMIDI_core_tests PRIVATE cxx_std_23)
 
+target_compile_definitions(GameControllerMIDI_core_tests PRIVATE SDL_MAIN_HANDLED)
+
 target_include_directories(GameControllerMIDI_core_tests
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}

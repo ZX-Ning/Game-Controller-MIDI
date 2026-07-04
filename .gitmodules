@@ -3,4 +3,4 @@
 	url = https://github.com/DISTRHO/DPF
 [submodule "third_party/DPF-Widgets"]
 	path = third_party/DPF-Widgets
-	url = https://github.com/DISTRHO/DPF-Widgets.git
+	url = https://github.com/ZX-Ning/DPF-Widgets.git
