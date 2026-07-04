@@ -62,14 +62,12 @@ jobs:
         run: call "%VCPKG_DIR%\bootstrap-vcpkg.bat" -disableMetrics
 
       - name: Prepare Khronos OpenGL headers
-        shell: pwsh
+        shell: cmd
         run: |
-          New-Item -ItemType Directory -Force third_party/DPF/khronos/GL, third_party/DPF/khronos/KHR | Out-Null
-          Copy-Item third_party/khronos/OpenGL-Registry/api/GL/glext.h third_party/DPF/khronos/GL/glext.h
-          Copy-Item third_party/khronos/EGL-Registry/api/KHR/khrplatform.h third_party/DPF/khronos/KHR/khrplatform.h
-          if (-not (Select-String -Path "third_party/DPF/khronos/GL/glext.h" -Pattern "PFNGLACTIVETEXTUREPROC" -Quiet)) {
-            throw "Prepared glext.h does not contain OpenGL extension function typedefs."
-          }
+          mkdir third_party\DPF\khronos\GL third_party\DPF\khronos\KHR
+          copy /Y third_party\khronos\OpenGL-Registry\api\GL\glext.h third_party\DPF\khronos\GL\glext.h
+          copy /Y third_party\khronos\EGL-Registry\api\KHR\khrplatform.h third_party\DPF\khronos\KHR\khrplatform.h
+          findstr /C:"PFNGLACTIVETEXTUREPROC" third_party\DPF\khronos\GL\glext.h
 
       - name: Configure
         shell: cmd
@@ -78,7 +76,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release ^
             -DCMAKE_TOOLCHAIN_FILE="%VCPKG_DIR%\scripts\buildsystems\vcpkg.cmake" ^
             -DVCPKG_TARGET_TRIPLET="%VCPKG_DEFAULT_TRIPLET%" ^
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            -DMSVC_RUNTIME_LIBRARY=MultiThreaded
 
       - name: Build
         shell: cmd
@@ -93,7 +91,5 @@ jobs:
         with:
           name: GameControllerMIDI-windows-msvc
           path: |
-            build/bin/GameControllerMIDI.vst3
-            build/bin/GameControllerMIDI.clap
-            build/bin/GameControllerMIDI-vst2.dll
+            build/bin/*
           if-no-files-found: warn

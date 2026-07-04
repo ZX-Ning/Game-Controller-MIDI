@@ -76,7 +76,5 @@ jobs:
         with:
           name: GameControllerMIDI-macos-${{ matrix.arch }}
           path: |
-            build/bin/GameControllerMIDI.vst3
-            build/bin/GameControllerMIDI.clap
-            build/bin/GameControllerMIDI.vst
+            build/bin/*
           if-no-files-found: warn

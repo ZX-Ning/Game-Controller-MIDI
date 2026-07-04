@@ -23,7 +23,7 @@ set(IMGUI_WIDGET_SRC
 include(cmake/EmbedPresets.cmake)
 
 dpf_add_plugin(GameControllerMIDI
-    TARGETS vst2 vst3 clap 
+    TARGETS vst2 vst3 clap au
     UI_TYPE opengl
     FILES_DSP
         src/Plugin.cpp

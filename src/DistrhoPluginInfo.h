@@ -20,6 +20,9 @@
 #define DISTRHO_PLUGIN_NAME                                "Game Controller MIDI"
 #define DISTRHO_PLUGIN_URI                                 "https://github.com/zx-ning/GameControllerMIDI"
 #define DISTRHO_PLUGIN_CLAP_ID                             "io.github.zx-ning.gamecontrollermidi"
+#define DISTRHO_PLUGIN_BRAND                               "ZX_Studio"
+#define DISTRHO_PLUGIN_BRAND_ID                            ZXNg
+#define DISTRHO_PLUGIN_UNIQUE_ID                           GcMd
 #define DISTRHO_PLUGIN_HAS_UI                              1
 #define DISTRHO_PLUGIN_IS_SYNTH                            0
 #define DISTRHO_PLUGIN_WANT_STATE                          1
