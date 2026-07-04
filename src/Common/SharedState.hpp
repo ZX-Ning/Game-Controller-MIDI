@@ -44,7 +44,7 @@ public:
         const int8_t clamped = clampOctave(value);
         const int8_t oldValue = fBaseOctave.exchange(clamped, std::memory_order_relaxed);
         if (oldValue != clamped) {
-            fBaseOctaveHostSyncPending.store(true, std::memory_order_relaxed);
+            fBaseOctaveHostSyncPending.store(true, std::memory_order_release);
         }
     }
 
@@ -56,7 +56,7 @@ public:
                 return;
             }
             if (fBaseOctave.compare_exchange_weak(current, next, std::memory_order_relaxed, std::memory_order_relaxed)) {
-                fBaseOctaveHostSyncPending.store(true, std::memory_order_relaxed);
+                fBaseOctaveHostSyncPending.store(true, std::memory_order_release);
                 return;
             }
         }
@@ -84,7 +84,7 @@ public:
     }
 
     bool consumeBaseOctaveHostSyncPending() {
-        return fBaseOctaveHostSyncPending.exchange(false, std::memory_order_relaxed);
+        return fBaseOctaveHostSyncPending.exchange(false, std::memory_order_acquire);
     }
 
 private:

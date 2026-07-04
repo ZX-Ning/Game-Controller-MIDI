@@ -3,33 +3,22 @@
 namespace GCMidi {
 
 MidiEventQueue::MidiEventQueue()
-    : fMidiQueue(1024),  // Sized for high-frequency axis events.
-      fPriorityNoteOffQueue(128) {
+    : fMidiQueue(1024) {  // Sized for high-frequency axis events.
 }
 
 bool MidiEventQueue::pushMidi(const RawMidi& midi) {
-    if (isNoteOff(midi)) {
-        if (fPriorityNoteOffQueue.push(midi) || fMidiQueue.push(midi)) {
-            return true;
-        }
-
-        fDroppedMidiEvents.fetch_add(1, std::memory_order_relaxed);
-        fDroppedNoteOffEvents.fetch_add(1, std::memory_order_relaxed);
-        return false;
-    }
-
-    if (fMidiQueue.push(midi)) {
+    if (fMidiQueue.bounded_push(midi)) {
         return true;
     }
 
     fDroppedMidiEvents.fetch_add(1, std::memory_order_relaxed);
+    if (isNoteOff(midi)) {
+        fDroppedNoteOffEvents.fetch_add(1, std::memory_order_relaxed);
+    }
     return false;
 }
 
 bool MidiEventQueue::popMidi(RawMidi& outEv) {
-    if (fPriorityNoteOffQueue.pop(outEv)) {
-        return true;
-    }
     return fMidiQueue.pop(outEv);
 }
 

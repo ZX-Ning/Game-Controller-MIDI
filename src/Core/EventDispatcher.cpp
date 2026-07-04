@@ -118,9 +118,7 @@ bool EventDispatcher::getButtonState(uint8_t button) const {
 void EventDispatcher::setMapper(std::unique_ptr<IMidiMapper> mapper) {
     std::lock_guard<std::mutex> lock(fMapperMutex);
     if (fMapper) {
-        if (!fMapper->flushActiveNotes(fMidiEvents)) {
-            return;
-        }
+        fMapper->flushActiveNotes(fMidiEvents);
     }
     fMapper = std::move(mapper);
     if (fMapper) {

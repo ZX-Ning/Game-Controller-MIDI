@@ -87,6 +87,12 @@ private:
      */
     std::mutex fMutex;
 
+    /**
+     * Serializes registration-driven init/cleanup so multiple plugin instances
+     * cannot start or stop SDL concurrently.
+     */
+    std::mutex fLifecycleMutex;
+
     /** Background SDL polling thread, created by `init()` and joined by `cleanup()`. */
     std::thread fThread;
 

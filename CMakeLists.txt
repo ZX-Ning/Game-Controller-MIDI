@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(GameControllerMIDI)
 
+enable_testing()
+
 set(DPF_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/DPF)
 include(${DPF_ROOT_DIR}/cmake/DPF-plugin.cmake)
 
@@ -61,3 +63,25 @@ target_include_directories(GameControllerMIDI-ui
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/DPF-Widgets/opengl
 )
+
+add_executable(GameControllerMIDI_core_tests
+    tests/core_tests.cpp
+    src/Core/EventDispatcher.cpp
+    src/Core/MidiEventQueue.cpp
+)
+
+target_compile_features(GameControllerMIDI_core_tests PRIVATE cxx_std_23)
+
+target_include_directories(GameControllerMIDI_core_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(GameControllerMIDI_core_tests
+    PRIVATE
+        SDL2::SDL2-static
+        Boost::boost
+)
+
+add_test(NAME GameControllerMIDI_core_tests COMMAND GameControllerMIDI_core_tests)

@@ -65,7 +65,7 @@ public:
     /** UI helper; atomically reads the last known state for one SDL button. */
     bool getButtonState(uint8_t button) const;
 
-    /** Replace the mapper under `fMapperMutex`, flushing old active notes first. */
+    /** Replace the mapper under `fMapperMutex`; old active-note flush is best-effort. */
     void setMapper(std::unique_ptr<IMidiMapper> mapper);
 
     /** Shared, UI/host-visible mapper control state. */

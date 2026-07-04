@@ -19,6 +19,8 @@ SdlManager::~SdlManager() {
 }
 
 void SdlManager::setEventHandler(IControllerEventHandler* handler) {
+    std::lock_guard<std::mutex> lifecycleLock(fLifecycleMutex);
+
     bool doInit = false;
     bool registered = false;
 
@@ -69,6 +71,8 @@ void SdlManager::setEventHandler(IControllerEventHandler* handler) {
 }
 
 void SdlManager::clearEventHandler(IControllerEventHandler* handler) {
+    std::lock_guard<std::mutex> lifecycleLock(fLifecycleMutex);
+
     bool doCleanup = false;
 
     {
@@ -95,7 +99,11 @@ void SdlManager::init() {
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return;
     }
-    fSdlInitialized = true;
+
+    {
+        std::lock_guard<std::mutex> lock(fMutex);
+        fSdlInitialized = true;
+    }
     fRunning = true;
     fThread = std::thread(&SdlManager::loop, this);
 }
@@ -105,6 +113,8 @@ void SdlManager::cleanup() {
     if (fThread.joinable() && std::this_thread::get_id() != fThread.get_id()) {
         fThread.join();
     }
+
+    std::lock_guard<std::mutex> lock(fMutex);
     if (fController) {
         SDL_GameControllerClose(fController);
         fController = nullptr;
