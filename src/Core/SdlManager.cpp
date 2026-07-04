@@ -58,7 +58,7 @@ void SdlManager::setEventHandler(IControllerEventHandler* handler) {
     if (doInit) {
         init();
         std::lock_guard<std::mutex> lock(fMutex);
-        if (hasHandlersLocked()) {
+        if (hasHandlers()) {
             checkControllerStatus();
         }
     }
@@ -80,7 +80,7 @@ void SdlManager::clearEventHandler(IControllerEventHandler* handler) {
             }
         }
 
-        doCleanup = fRunning && !hasHandlersLocked();
+        doCleanup = fRunning && !hasHandlers();
     }
 
     if (doCleanup) {
@@ -117,7 +117,7 @@ void SdlManager::cleanup() {
 
 void SdlManager::checkControllerStatus() {
     if (fController) {
-        auto handlers = getHandlerSnapshotLocked();
+        auto handlers = getHandlerSnapshot();
         for (auto* handler : handlers) {
             if (handler) {
                 handler->onControllerConnected(SDL_GameControllerName(fController));
@@ -132,7 +132,7 @@ void SdlManager::checkControllerStatus() {
             if (ctrl) {
                 fController = ctrl;
                 const char* name = SDL_GameControllerName(ctrl);
-                auto handlers = getHandlerSnapshotLocked();
+                auto handlers = getHandlerSnapshot();
                 for (auto* handler : handlers) {
                     if (handler && name) {
                         handler->onControllerConnected(name);
@@ -186,7 +186,7 @@ void SdlManager::handleControllerRemoved(const SDL_ControllerDeviceEvent& event)
     if (instanceId == (SDL_JoystickID)event.which) {
         SDL_GameControllerClose(fController);
         fController = nullptr;
-        auto handlers = getHandlerSnapshotLocked();
+        auto handlers = getHandlerSnapshot();
         for (auto* handler : handlers) {
             if (handler) {
                 handler->onControllerDisconnected();
@@ -202,7 +202,7 @@ void SdlManager::handleControllerButton(const SDL_ControllerButtonEvent& event) 
 
     bool down = (event.type == SDL_CONTROLLERBUTTONDOWN);
     uint8_t button = event.button;
-    auto handlers = getHandlerSnapshotLocked();
+    auto handlers = getHandlerSnapshot();
     for (auto* handler : handlers) {
         if (!handler) {
             continue;
@@ -221,7 +221,7 @@ void SdlManager::handleControllerAxis(const SDL_ControllerAxisEvent& event) {
 
     uint8_t axis = event.axis;
     int16_t value = event.value;
-    auto handlers = getHandlerSnapshotLocked();
+    auto handlers = getHandlerSnapshot();
     for (auto* handler : handlers) {
         if (!handler) {
             continue;
@@ -233,17 +233,13 @@ void SdlManager::handleControllerAxis(const SDL_ControllerAxisEvent& event) {
     }
 }
 
-bool SdlManager::hasHandlersLocked() const {
+bool SdlManager::hasHandlers() const {
     for (auto* handler : fHandlers) {
         if (handler) {
             return true;
         }
     }
     return false;
-}
-
-std::array<IControllerEventHandler*, MAX_SDL_EVENT_HANDLERS> SdlManager::getHandlerSnapshotLocked() const {
-    return fHandlers;
 }
 
 }  // namespace GCMidi

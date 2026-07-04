@@ -64,16 +64,26 @@ private:
     /** Forward axis motion to handlers. Requires `fMutex`. */
     void handleControllerAxis(const SDL_ControllerAxisEvent& event);
 
-    /** Return whether any handler slots are occupied. Requires `fMutex`. */
-    bool hasHandlersLocked() const;
+    /** Return whether any handler slots are occupied. Caller must hold `fMutex`. */
+    bool hasHandlers() const;
 
-    /** Copy handler slots for iteration. Requires `fMutex`. */
-    std::array<IControllerEventHandler*, MAX_SDL_EVENT_HANDLERS> getHandlerSnapshotLocked() const;
+    /** Copy handler slots for iteration. Caller must hold `fMutex`. */
+    std::array<IControllerEventHandler*, MAX_SDL_EVENT_HANDLERS> getHandlerSnapshot() const {
+        return fHandlers;
+    }
 
     /**
-     * Protects `fController`, `fHandlers`, and `fSdlInitialized`. Handler
-     * callbacks run while this is held, so callbacks must not call back into
-     * `SdlManager`. Never lock it from the audio thread.
+     * Protects SDL manager lifecycle state: `fController`, `fHandlers`, and
+     * `fSdlInitialized`.
+     *
+     * Accessed by the UI/host lifecycle thread through plugin construction and
+     * destruction (`setEventHandler()` / `clearEventHandler()`) and by the SDL
+     * polling thread through `handleEvent()`. The audio callback thread never
+     * touches `SdlManager` and must never lock this.
+     *
+     * Handler callbacks currently run while this mutex is held, so callbacks
+     * must not call back into `SdlManager`. `fRunning` is atomic and `fThread`
+     * is lifecycle-owned; neither is protected by this mutex.
      */
     std::mutex fMutex;
 

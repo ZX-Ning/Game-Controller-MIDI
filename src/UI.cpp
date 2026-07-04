@@ -1,23 +1,7 @@
-/*
- * DISTRHO Plugin Framework (DPF)
- * Copyright (C) 2012-2022 Filipe Coelho <falktx@falktx.com>
- *
- * Permission to use, copy, modify, and/or distribute this software for any purpose with
- * or without fee is hereby granted, provided that the above copyright notice and this
- * permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD
- * TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN
- * NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
- * DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER
- * IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- */
-
-#include <fstream>
-#include <sstream>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <sstream>
 
 #include "DistrhoPluginInfo.h"
 #include "DistrhoUI.hpp"
@@ -29,9 +13,9 @@ START_NAMESPACE_DISTRHO
 /**
  * Dear ImGui editor and performance display for one plugin instance.
  *
- * All fields are UI-thread-owned. `fDraftConfig` is copied to/from the plugin's
- * active config under `GameControllerMIDIPlugin::fConfigMutex`; file I/O and
- * JSON work stay on the UI thread and must never move into `run()`.
+ * All fields are UI-thread-owned. `fDraftConfig` is copied to/from the plugin
+ * through its public config API; file I/O and JSON work stay on the UI thread
+ * and must never move into `run()`.
  */
 class GameControllerMIDIUI : public UI {
 public:
@@ -42,89 +26,17 @@ public:
     }
 
 protected:
-    /** Render one ImGui frame, including mode selection and toast overlay. */
-    void onImGuiDisplay() override {
-        const float width = getWidth();
-        const float height = getHeight();
-
-        // Remove window padding to fill entire plugin window
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-        ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::SetNextWindowSize(ImVec2(width, height));
-        ImGui::Begin("Main", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-
-        // Add padding back for content area
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
-
-        auto* plugin = static_cast<GameControllerMIDIPlugin*>(getPluginInstancePointer());
-        if (!plugin || !plugin->fDispatcher) {
-            ImGui::TextColored(ImVec4(1, 0, 0, 1), "Error: Plugin or Dispatcher not found");
-            ImGui::End();
-            ImGui::PopStyleVar(2);
-            return;
-        }
-
-        if (fIsEditMode) {
-            renderEditModeUI(plugin);
-        }
-        else {
-            renderPlayModeUI(plugin);
-        }
-
-        ImGui::PopStyleVar();
-        ImGui::End();
-        ImGui::PopStyleVar();
-
-        // Render toast notification
-        if (fShowToast) {
-            fToastTimer -= ImGui::GetIO().DeltaTime;
-            if (fToastTimer <= 0) {
-                fShowToast = false;
-            }
-            else {
-                ImGui::SetNextWindowPos(ImVec2(width / 2, 50), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-                ImGui::SetNextWindowBgAlpha(0.9f);
-                ImGui::Begin("##Toast", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-                ImGui::Text("%s", fToastMessage.c_str());
-                ImGui::End();
-            }
-        }
-    }
+    void onImGuiDisplay() override;
 
     /** Repaint when the host reports a parameter change. */
     void parameterChanged(uint32_t, float) override {
         repaint();
     }
 
-    /** Mirror host/plugin state changes into local mode and window size. */
-    void stateChanged(const char* key, const char* value) override {
-        if (std::strcmp(key, "editMode") == 0) {
-            fIsEditMode = (std::strcmp(value, "true") == 0);
-        }
-        else if (std::strcmp(key, "width") == 0) {
-            uint32_t w = static_cast<uint32_t>(std::atoi(value));
-            if (w != getWidth()) {
-                setSize(w, getHeight());
-            }
-        }
-        else if (std::strcmp(key, "height") == 0) {
-            uint32_t h = static_cast<uint32_t>(std::atoi(value));
-            if (h != getHeight()) {
-                setSize(getWidth(), h);
-            }
-        }
-    }
+    void stateChanged(const char* key, const char* value) override;
 
     /** Persist resized UI dimensions back to plugin state. */
-    void onResize(const ResizeEvent& ev) override {
-        UI::onResize(ev);  // Update ImGui DisplaySize
-
-        // Notify host of new size
-        setState("width", std::to_string(ev.size.getWidth()).c_str());
-        setState("height", std::to_string(ev.size.getHeight()).c_str());
-
-        repaint();  // Force redraw
-    }
+    void onResize(const ResizeEvent& ev) override;
 
 private:
     /** Current UI mode, mirrored through the `"editMode"` state key. */
@@ -182,7 +94,7 @@ private:
     /** Render fixed-size chord interval editing controls. */
     void renderChordIntervalEditor(MapperConfig::ButtonConfig& config);
 
-    /** Copy active plugin config into `fDraftConfig` under `fConfigMutex`. */
+    /** Copy active plugin config into `fDraftConfig`. */
     void loadDraftFromActive(GameControllerMIDIPlugin* plugin);
 
     /** Commit draft config, reload mapper outside the config lock, and persist JSON. */
@@ -225,8 +137,85 @@ UI* createUI() {
     return new GameControllerMIDIUI();
 }
 
+/** Render one ImGui frame, including mode selection and toast overlay. */
+inline void GameControllerMIDIUI::onImGuiDisplay() {
+    const float width = getWidth();
+    const float height = getHeight();
+
+    // Remove window padding to fill entire plugin window
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(width, height));
+    ImGui::Begin("Main", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+
+    // Add padding back for content area
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
+
+    auto* plugin = static_cast<GameControllerMIDIPlugin*>(getPluginInstancePointer());
+    if (!plugin || !plugin->dispatcher()) {
+        ImGui::TextColored(ImVec4(1, 0, 0, 1), "Error: Plugin or Dispatcher not found");
+        ImGui::End();
+        ImGui::PopStyleVar(2);
+        return;
+    }
+
+    if (fIsEditMode) {
+        renderEditModeUI(plugin);
+    }
+    else {
+        renderPlayModeUI(plugin);
+    }
+
+    ImGui::PopStyleVar();
+    ImGui::End();
+    ImGui::PopStyleVar();
+
+    // Render toast notification
+    if (fShowToast) {
+        fToastTimer -= ImGui::GetIO().DeltaTime;
+        if (fToastTimer <= 0) {
+            fShowToast = false;
+        }
+        else {
+            ImGui::SetNextWindowPos(ImVec2(width / 2, 50), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowBgAlpha(0.9f);
+            ImGui::Begin("##Toast", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+            ImGui::Text("%s", fToastMessage.c_str());
+            ImGui::End();
+        }
+    }
+}
+
+/** Mirror host/plugin state changes into local mode and window size. */
+inline void GameControllerMIDIUI::stateChanged(const char* key, const char* value) {
+    if (std::strcmp(key, "editMode") == 0) {
+        fIsEditMode = (std::strcmp(value, "true") == 0);
+    }
+    else if (std::strcmp(key, "width") == 0) {
+        uint32_t w = static_cast<uint32_t>(std::atoi(value));
+        if (w != getWidth()) {
+            setSize(w, getHeight());
+        }
+    }
+    else if (std::strcmp(key, "height") == 0) {
+        uint32_t h = static_cast<uint32_t>(std::atoi(value));
+        if (h != getHeight()) {
+            setSize(getWidth(), h);
+        }
+    }
+}
+void DISTRHO::GameControllerMIDIUI::onResize(const ResizeEvent& ev) {
+    UI::onResize(ev);  // Update ImGui DisplaySize
+
+    // Notify host of new size
+    setState("width", std::to_string(ev.size.getWidth()).c_str());
+    setState("height", std::to_string(ev.size.getHeight()).c_str());
+
+    repaint();  // Force redraw
+}
+
 void GameControllerMIDIUI::renderPlayModeUI(GameControllerMIDIPlugin* plugin) {
-    auto& dispatcher = *plugin->fDispatcher;
+    auto& dispatcher = *plugin->dispatcher();
 
     ImGui::Text("Game Controller MIDI - Play Mode");
     ImGui::Separator();
@@ -338,15 +327,13 @@ void GameControllerMIDIUI::renderPlayModeUI(GameControllerMIDIPlugin* plugin) {
 
     uint64_t droppedMidi = dispatcher.getDroppedMidiEventCount();
     if (droppedMidi > 0) {
-        ImGui::TextColored(ImVec4(1, 0.7f, 0, 1), "Dropped MIDI events: %llu (Note Off: %llu)",
-                           static_cast<unsigned long long>(droppedMidi),
-                           static_cast<unsigned long long>(dispatcher.getDroppedNoteOffCount()));
+        ImGui::TextColored(ImVec4(1, 0.7f, 0, 1), "Dropped MIDI events: %llu (Note Off: %llu)", static_cast<unsigned long long>(droppedMidi), static_cast<unsigned long long>(dispatcher.getDroppedNoteOffCount()));
     }
 
     if (ImGui::Button("Edit Config", ImVec2(-1, 40))) {
         fIsEditMode = true;
         loadDraftFromActive(plugin);
-        plugin->fPlayMode = false;
+        plugin->setPlayMode(false);
         setState("editMode", "true");
     }
 }
@@ -430,13 +417,13 @@ void GameControllerMIDIUI::renderEditModeUI(GameControllerMIDIPlugin* plugin) {
     if (ImGui::Button("Apply & Play", ImVec2(btnWidth, 40))) {
         applyDraftToActive(plugin);
         fIsEditMode = false;
-        plugin->fPlayMode = true;
+        plugin->setPlayMode(true);
         setState("editMode", "false");
     }
     ImGui::SameLine();
     if (ImGui::Button("Cancel", ImVec2(btnWidth, 40))) {
         fIsEditMode = false;
-        plugin->fPlayMode = true;
+        plugin->setPlayMode(true);
         setState("editMode", "false");
     }
     ImGui::SameLine();
@@ -650,20 +637,13 @@ void GameControllerMIDIUI::renderAxisEditor(int axisIndex, MapperConfig::AxisCon
 }
 
 void GameControllerMIDIUI::loadDraftFromActive(GameControllerMIDIPlugin* plugin) {
-    std::lock_guard<std::mutex> lock(plugin->fConfigMutex);
-    fDraftConfig = plugin->fActiveConfig;
+    fDraftConfig = plugin->activeConfigCopy();
 }
 
 void GameControllerMIDIUI::applyDraftToActive(GameControllerMIDIPlugin* plugin) {
-    {
-        std::lock_guard<std::mutex> lock(plugin->fConfigMutex);
-        plugin->fActiveConfig = fDraftConfig;
-    }
+    plugin->setActiveConfig(fDraftConfig);
 
-    // Reload outside lock to avoid deadlock
-    plugin->reloadMapper();
-
-    // Persist to host outside lock
+    // Persist to host after updating the live mapper.
     std::string json = MapperConfig::serializePreset(fDraftConfig);
     setState("config", json.c_str());
 }

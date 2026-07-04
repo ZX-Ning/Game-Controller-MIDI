@@ -4,6 +4,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <optional>
 
 #include "Core/EventDispatcher.hpp"
 #include "DistrhoPlugin.hpp"
@@ -105,13 +106,33 @@ protected:
     void run(const float** inputs, float** outputs, uint32_t frames, const MidiEvent* midiEvents, uint32_t midiEventCount) override;
 
 public:
+    /** UI-safe access to controller state and MIDI diagnostics. */
+    GCMidi::EventDispatcher* dispatcher();
+
+    /** Copy the active preset under the plugin config mutex. */
+    MapperConfig::MapperPreset activeConfigCopy() const;
+
+    /** Replace the active preset and rebuild the mapper outside the config lock. */
+    void setActiveConfig(const MapperConfig::MapperPreset& config);
+
+    /** Mirror the current UI mode for host state serialization. */
+    void setPlayMode(bool playMode);
+
+private:
     // Core logic hub; owns the thread-safe bridge to SDL and audio output.
     std::unique_ptr<GCMidi::EventDispatcher> fDispatcher;
 
     // Active preset used to build mapper instances. Guard with `fConfigMutex`.
     MapperConfig::MapperPreset fActiveConfig{};
 
-    // Protects `fActiveConfig`; never take this mutex in `run()`.
+    /**
+     * Protects only `fActiveConfig`.
+     *
+     * Accessed by the UI/host lifecycle thread through `activeConfigCopy()`,
+     * `setActiveConfig()`, `setState("config")`, `getState("config")`, and
+     * `reloadMapper()`. The audio callback thread must never lock this;
+     * The SDL polling thread does not access plugin config directly.
+     */
     mutable std::mutex fConfigMutex;
 
     // UI/host state mirrors. Atomics avoid locking for simple reads/writes.
@@ -122,15 +143,11 @@ public:
     /** Rebuild mapper from `fActiveConfig`; may allocate and flush notes. */
     void reloadMapper();
 
-private:
     /** Process-wide instance count used around global SDL lifecycle assumptions. */
     static std::atomic<int> sInstanceCount;
 
-    /** Audio-thread-owned pending host-output flag. */
-    bool fHasPendingMidiOutput = false;
-
     /** Audio-thread-owned MIDI event retried on the next callback. */
-    GCMidi::RawMidi fPendingMidiOutput{};
+    std::optional<GCMidi::RawMidi> fPendingMidiOutput;
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GameControllerMIDIPlugin)
 };

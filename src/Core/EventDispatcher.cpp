@@ -13,7 +13,7 @@ EventDispatcher::~EventDispatcher() {
 }
 
 void EventDispatcher::onControllerConnected(const char* name) {
-    std::lock_guard<std::mutex> lock(fStateMutex);
+    std::lock_guard<std::mutex> lock(fControllerNameMutex);
     fControllerConnected.store(true, std::memory_order_relaxed);
     if (name) {
         fControllerName = name;
@@ -25,7 +25,7 @@ void EventDispatcher::onControllerConnected(const char* name) {
 
 void EventDispatcher::onControllerDisconnected() {
     {
-        std::lock_guard<std::mutex> lock(fStateMutex);
+        std::lock_guard<std::mutex> lock(fControllerNameMutex);
         fControllerConnected.store(false, std::memory_order_relaxed);
         fControllerName.clear();
         for (int i = 0; i < SDL_CONTROLLER_BUTTON_MAX; ++i) {
@@ -107,7 +107,7 @@ bool EventDispatcher::isConnected() const {
 }
 
 std::string EventDispatcher::getControllerName() const {
-    std::lock_guard<std::mutex> lock(fStateMutex);
+    std::lock_guard<std::mutex> lock(fControllerNameMutex);
     return fControllerName;
 }
 

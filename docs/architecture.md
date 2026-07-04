@@ -35,13 +35,27 @@ Detailed documentation of core components, threading model, and state management
 
 ## Threading Model
 
-| Thread | Responsibility | Real-time Safe? |
-|--------|----------------|-----------------|
-| **Audio Thread** | `Plugin::run()` — pops from MIDI queue, writes to host | Yes (must be) |
-| **SDL Thread** | `SdlManager` — polls controller and dispatches events to mapper/dispatcher | No (background) |
-| **UI Thread** | `GameControllerMIDIUI` — renders ImGui | No |
+| Thread / Context | Responsibility | Real-time Safe? |
+|------------------|----------------|-----------------|
+| **Audio callback thread** | `Plugin::run()` — pops from MIDI queue, writes to host | Yes (must be) |
+| **SDL polling thread** | `SdlManager::loop()` — polls controller and dispatches events to mapper/dispatcher | No (background) |
+| **UI thread** | `GameControllerMIDIUI` — renders ImGui, edits draft presets, calls UI-facing plugin APIs | No |
+| **Host state/lifecycle thread** | DPF callbacks such as `setState()`, `getState()`, `setParameterValue()`, `deactivate()`, plugin construction/destruction | No |
 
 **Critical**: The audio thread must never block. MIDI events cross into the audio thread through `boost::lockfree::queue`; small UI/host-visible control values use atomics in dispatcher-owned shared state.
+
+The UI thread and host state/lifecycle thread may be the same thread in some hosts, but the code must not rely on that. Treat them as separate contexts when documenting ownership and synchronization.
+
+### Mutex Ownership
+
+| Mutex | Protects | Accessed By | Not Accessed By |
+|-------|----------|-------------|-----------------|
+| `GameControllerMIDIPlugin::fConfigMutex` | `fActiveConfig` | UI thread through `activeConfigCopy()` / `setActiveConfig()`; host state/lifecycle thread through `setState("config")`, `getState("config")`, and `reloadMapper()` | Audio callback thread, SDL polling thread |
+| `EventDispatcher::fMapperMutex` | `fMapper` lifetime, mapper calls, mapper-owned runtime state such as active notes, CC toggles, and last axis values | SDL polling thread through controller callbacks and shift queries; UI thread indirectly through applying config; host state/lifecycle thread through `setMapper()` / `deactivate()` | Audio callback thread |
+| `EventDispatcher::fControllerNameMutex` | `fControllerName` only | SDL polling thread writes connection/disconnection names; UI thread reads through `getControllerName()` | Audio callback thread, host state/lifecycle thread |
+| `SdlManager::fMutex` | `fController`, `fHandlers`, `fSdlInitialized` | SDL polling thread through `handleEvent()`; host state/lifecycle thread through plugin construction/destruction registration | Audio callback thread; UI thread in normal operation |
+
+`SdlManager::fMutex` currently remains held while invoking handler callbacks. Those callbacks must not call back into `SdlManager`.
 
 ---
 

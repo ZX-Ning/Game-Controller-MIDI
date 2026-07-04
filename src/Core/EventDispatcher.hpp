@@ -88,10 +88,16 @@ private:
     std::unique_ptr<IMidiMapper> fMapper;
 
     /**
-     * Serializes `fMapper` lifetime and every mapper call. This also protects
-     * mapper-owned runtime state such as active notes, CC toggles, last axis
-     * values, and preset reads. It does not protect queues,
-     * atomics, or `fControllerName`. Never lock this from the audio thread.
+     * Protects `fMapper` lifetime and every call into the mapper. This also
+     * protects mapper-owned runtime state such as active notes, CC toggles, last
+     * axis values, and preset reads.
+     *
+     * Accessed by the SDL polling thread through controller callbacks and shift
+     * button queries. Accessed by the UI/host lifecycle thread through
+     * `setMapper()` and `deactivate()`. The audio callback thread must never
+     * lock this; it only drains `fMidiEvents`, which is a separate lock-free
+     * queue. This mutex does not protect atomics, `fMidiEvents`,
+     * `fSharedState`, or `fControllerName`.
      */
     mutable std::mutex fMapperMutex;
 
@@ -101,8 +107,19 @@ private:
     /** SDL-written, UI-read connection flag. */
     std::atomic<bool> fControllerConnected;
 
-    /** Controller name for UI display; protected by `fStateMutex`. */
+    /** Controller name for UI display; protected by `fControllerNameMutex`. */
     std::string fControllerName;
+
+    /**
+     * Protects only `fControllerName`.
+     *
+     * Written by the SDL polling thread from connection/disconnection callbacks
+     * and read by the UI thread through `getControllerName()`. The audio
+     * callback thread never reads the controller name and must never lock this.
+     * Connection state and button states are atomics and are not protected by
+     * this mutex.
+     */
+    mutable std::mutex fControllerNameMutex;
 
     /** Per-button states written by SDL thread and read by UI thread. */
     std::atomic<bool> fButtonStates[SDL_CONTROLLER_BUTTON_MAX];
@@ -116,12 +133,8 @@ private:
     /** SDL-thread-only edge detector for RT octave-up. */
     bool fRightTriggerPressed = false;
 
-    /** Protects only `fControllerName`; never lock from the audio thread. */
-    mutable std::mutex fStateMutex;
-
     /** Flush active mapper notes. Requires `fMapperMutex`. */
     void clearMapperRuntimeStateLocked();
-
 };
 
 }  // namespace GCMidi
