@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include "Common/MidiTypes.hpp"
+#include "Common/SharedState.hpp"
 
 namespace GCMidi {
 
@@ -23,31 +24,18 @@ public:
     /** Return a null-terminated mapper or preset name. */
     virtual const char* getName() const = 0;
 
-    /** Process a button event and push generated MIDI to `out`. */
-    virtual void onButton(uint8_t button, bool pressed, bool shiftState, IMidiOutputSink& out) = 0;
+    /** Process a button event and update shared state if needed. */
+    virtual void onButton(uint8_t button, bool pressed, bool shiftState, SharedState& state, IMidiOutputSink& out) = 0;
 
     /** Process an axis event from analog sticks or triggers. */
-    virtual void onAxis(uint8_t axis, int16_t value, bool shiftState, IMidiOutputSink& out) = 0;
+    virtual void onAxis(uint8_t axis, int16_t value, bool shiftState, const SharedState& state, IMidiOutputSink& out) = 0;
 
     /** Emit Note Off for held notes; failed sends must remain tracked. */
     virtual bool flushActiveNotes(IMidiOutputSink& out) = 0;
 
-    /** Return the base octave offset shown in UI and plugin state. */
-    virtual int getOctaveOffset() const {
+    /** Return the preset's initial base octave offset. */
+    virtual int8_t getInitialBaseOctaveOffset() const {
         return 0;
-    }
-
-    /** Set the base octave offset. */
-    virtual void setOctaveOffset(int offset) = 0;
-
-    /** Return the transient LT/RT trigger octave offset. */
-    virtual int8_t getTriggerOctaveOffset() const {
-        return 0;
-    }
-
-    /** Set the transient LT/RT trigger octave offset. */
-    virtual void setTriggerOctaveOffset(int8_t offset) {
-        (void)offset;
     }
 
     /** Return the global SDL button used as shift modifier. */

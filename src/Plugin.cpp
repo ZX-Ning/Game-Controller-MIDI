@@ -79,14 +79,14 @@ void GameControllerMIDIPlugin::initParameter(uint32_t index, Parameter& paramete
 
 float GameControllerMIDIPlugin::getParameterValue(uint32_t index) const {
     if (index == kParamOctave && fDispatcher) {
-        return static_cast<float>(fDispatcher->getBaseOctaveOffset());
+        return static_cast<float>(fDispatcher->sharedState().baseOctave());
     }
     return 0.0f;
 }
 
 void GameControllerMIDIPlugin::setParameterValue(uint32_t index, float value) {
     if (index == kParamOctave && fDispatcher) {
-        fDispatcher->requestBaseOctaveOffset(static_cast<int>(value));
+        fDispatcher->sharedState().setBaseOctaveFromHost(static_cast<int>(value));
     }
 }
 
@@ -144,7 +144,7 @@ void GameControllerMIDIPlugin::setState(const char* key, const char* value) {
         case kStateTriggerOctave: {
             int8_t offset = static_cast<int8_t>(std::atoi(value));
             if (fDispatcher) {
-                fDispatcher->setTriggerOctaveOffset(offset);
+                fDispatcher->sharedState().setTriggerOctave(offset);
             }
             break;
         }
@@ -175,7 +175,7 @@ String GameControllerMIDIPlugin::getState(const char* key) const {
             return String(MapperConfig::serializePreset(fActiveConfig).c_str());
         }
         case kStateTriggerOctave:
-            return String(std::to_string(fDispatcher ? fDispatcher->getTriggerOctaveOffset() : 0).c_str());
+            return String(std::to_string(fDispatcher ? fDispatcher->sharedState().triggerOctave() : 0).c_str());
         case kStateEditMode:
             return String(!fPlayMode.load() ? "true" : "false");
         case kStateWidth:
@@ -209,10 +209,10 @@ void GameControllerMIDIPlugin::run(
     uint32_t midiEventCount
 ) {
     // 0. Check for parameter changes from within the dispatcher (e.g. D-Pad octave change)
-    if (fDispatcher && fDispatcher->getAndResetBaseOctaveDirty()) {
+    if (fDispatcher && fDispatcher->sharedState().consumeBaseOctaveHostSyncPending()) {
         requestParameterValueChange(
             kParamOctave,
-            static_cast<float>(fDispatcher->getBaseOctaveOffset())
+            static_cast<float>(fDispatcher->sharedState().baseOctave())
         );
     }
 

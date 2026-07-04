@@ -10,6 +10,7 @@
 #include <string>
 
 #include "Common/MidiTypes.hpp"
+#include "Common/SharedState.hpp"
 #include "Core/IControllerEventHandler.hpp"
 #include "Core/MidiEventQueue.hpp"
 #include "Logic/IMidiMapper.hpp"
@@ -67,20 +68,11 @@ public:
     /** Replace the mapper under `fMapperMutex`, flushing old active notes first. */
     void setMapper(std::unique_ptr<IMidiMapper> mapper);
 
-    /** Atomically report and clear a mapper-driven base-octave change. */
-    bool getAndResetBaseOctaveDirty();
+    /** Shared, UI/host-visible mapper control state. */
+    SharedState& sharedState();
 
-    /** Atomic mirror of the mapper base octave, for UI/host display. */
-    int getBaseOctaveOffset() const;
-
-    /** Request a base-octave change; mapper update is deferred to SDL thread. */
-    void requestBaseOctaveOffset(int offset);
-
-    /** Atomic read of the transient LT/RT trigger octave offset. */
-    int8_t getTriggerOctaveOffset() const;
-
-    /** Set trigger octave and update the mapper under `fMapperMutex`. */
-    void setTriggerOctaveOffset(int8_t offset);
+    /** Shared, UI/host-visible mapper control state. */
+    const SharedState& sharedState() const;
 
     /** Host lifecycle hook; flushes active notes, not for the audio callback. */
     void deactivate();
@@ -97,8 +89,8 @@ private:
 
     /**
      * Serializes `fMapper` lifetime and every mapper call. This also protects
-     * mapper-owned state such as active notes, CC toggles, last axis values,
-     * preset reads, and mapper octave fields. It does not protect queues,
+     * mapper-owned runtime state such as active notes, CC toggles, last axis
+     * values, and preset reads. It does not protect queues,
      * atomics, or `fControllerName`. Never lock this from the audio thread.
      */
     mutable std::mutex fMapperMutex;
@@ -115,17 +107,8 @@ private:
     /** Per-button states written by SDL thread and read by UI thread. */
     std::atomic<bool> fButtonStates[SDL_CONTROLLER_BUTTON_MAX];
 
-    /** Public trigger-octave mirror; mapper copy is changed under `fMapperMutex`. */
-    std::atomic<int8_t> fTriggerOctaveOffset{0};
-
-    /** Public base-octave mirror; mapper copy is changed under `fMapperMutex`. */
-    std::atomic<int8_t> fBaseOctaveOffset{0};
-
-    /** Pending base-octave value requested by UI/host and consumed by SDL thread. */
-    std::atomic<int8_t> fRequestedBaseOctaveOffset{0};
-
-    /** True when `fRequestedBaseOctaveOffset` still needs applying to mapper. */
-    std::atomic<bool> fBaseOctaveRequestPending{false};
+    /** Shared octave and host-sync state; owned by this dispatcher. */
+    SharedState fSharedState;
 
     /** SDL-thread-only edge detector for LT octave-down. */
     bool fLeftTriggerPressed = false;
@@ -133,14 +116,8 @@ private:
     /** SDL-thread-only edge detector for RT octave-up. */
     bool fRightTriggerPressed = false;
 
-    /** Mapper-driven base-octave changes set this for host/UI synchronization. */
-    std::atomic<bool> fBaseOctaveDirty;
-
     /** Protects only `fControllerName`; never lock from the audio thread. */
     mutable std::mutex fStateMutex;
-
-    /** Apply a pending base-octave request. Requires `fMapperMutex`. */
-    void applyPendingBaseOctaveOffsetLocked();
 
     /** Flush active mapper notes. Requires `fMapperMutex`. */
     void clearMapperRuntimeStateLocked();

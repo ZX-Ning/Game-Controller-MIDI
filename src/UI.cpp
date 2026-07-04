@@ -237,16 +237,15 @@ void GameControllerMIDIUI::renderPlayModeUI(GameControllerMIDIPlugin* plugin) {
 
         // Octave display (base + trigger)
         {
-            int baseOctave = dispatcher.getBaseOctaveOffset();
-            int triggerOctave = dispatcher.getTriggerOctaveOffset();
+            const auto octave = dispatcher.sharedState().octaveSnapshot();
             ImGui::SameLine();
             ImGui::TextDisabled("|");
             ImGui::SameLine();
-            ImGui::Text("Base Octave: %+d", baseOctave);
+            ImGui::Text("Base Octave: %+d", octave.base);
             ImGui::SameLine();
             ImGui::TextDisabled("|");
             ImGui::SameLine();
-            ImGui::Text("Trigger Octave: %+d", triggerOctave);
+            ImGui::Text("Trigger Octave: %+d", octave.trigger);
             ImGui::SameLine();
             ImGui::TextDisabled("(LT/RT)");
         }

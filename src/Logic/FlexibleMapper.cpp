@@ -12,6 +12,16 @@ namespace GCMidi {
 
 FlexibleMapper::FlexibleMapper() = default;
 
+void MapperRuntimeState::reset() {
+    for (auto& notes : activeNotes) {
+        notes.count = 0;
+    }
+
+    ccToggleStates.fill(false);
+    lastAxisCCValues.fill(255);  // Force initial send
+    lastAxisPitchBendValues.fill(0xFFFF);
+}
+
 bool FlexibleMapper::loadPreset(const uint8_t* jsonData, size_t jsonSize) {
     std::string jsonStr(reinterpret_cast<const char*>(jsonData), jsonSize);
     if (MapperConfig::deserializePreset(jsonStr, fPreset)) {
@@ -23,20 +33,10 @@ bool FlexibleMapper::loadPreset(const uint8_t* jsonData, size_t jsonSize) {
 
 void FlexibleMapper::setPreset(const MapperConfig::MapperPreset& preset) {
     fPreset = preset;
-
-    // Reset runtime state
-    fOctaveOffset = fPreset.baseOctaveOffset;
-
-    for (auto& notes : fActiveNotes) {
-        notes.count = 0;
-    }
-
-    fCCToggleStates.fill(false);
-    fLastAxisCCValues.fill(255);  // Force initial send
-    fLastAxisPitchBendValues.fill(0xFFFF);
+    fState.reset();
 }
 
-void FlexibleMapper::onButton(uint8_t button, bool pressed, bool shift, IMidiOutputSink& out) {
+void FlexibleMapper::onButton(uint8_t button, bool pressed, bool shift, SharedState& state, IMidiOutputSink& out) {
     if (button >= SDL_CONTROLLER_BUTTON_MAX) {
         return;
     }
@@ -45,10 +45,10 @@ void FlexibleMapper::onButton(uint8_t button, bool pressed, bool shift, IMidiOut
 
     switch (config.mode) {
         case MapperConfig::ButtonMode::Note:
-            handleNoteMode(config, pressed, button, out);
+            handleNoteMode(config, pressed, button, state.octaveSnapshot(), out);
             break;
         case MapperConfig::ButtonMode::Chord:
-            handleChordMode(config, pressed, button, out);
+            handleChordMode(config, pressed, button, state.octaveSnapshot(), out);
             break;
         case MapperConfig::ButtonMode::CC_Momentary:
             handleCCMomentary(config, pressed, out);
@@ -57,13 +57,13 @@ void FlexibleMapper::onButton(uint8_t button, bool pressed, bool shift, IMidiOut
             handleCCToggle(config, pressed, out);
             break;
         case MapperConfig::ButtonMode::OctaveUp:
-            if (pressed && fOctaveOffset < 4) {
-                ++fOctaveOffset;
+            if (pressed) {
+                state.adjustBaseOctaveFromMapper(1);
             }
             break;
         case MapperConfig::ButtonMode::OctaveDown:
-            if (pressed && fOctaveOffset > -4) {
-                --fOctaveOffset;
+            if (pressed) {
+                state.adjustBaseOctaveFromMapper(-1);
             }
             break;
         case MapperConfig::ButtonMode::None:
@@ -72,7 +72,9 @@ void FlexibleMapper::onButton(uint8_t button, bool pressed, bool shift, IMidiOut
     }
 }
 
-void FlexibleMapper::onAxis(uint8_t axis, int16_t value, bool shift, IMidiOutputSink& out) {
+void FlexibleMapper::onAxis(uint8_t axis, int16_t value, bool shift, const SharedState& state, IMidiOutputSink& out) {
+    (void)state;
+
     if (axis >= SDL_CONTROLLER_AXIS_MAX) {
         return;
     }
@@ -92,30 +94,18 @@ void FlexibleMapper::onAxis(uint8_t axis, int16_t value, bool shift, IMidiOutput
     }
 }
 
-int FlexibleMapper::getOctaveOffset() const {
-    return fOctaveOffset;
+int8_t FlexibleMapper::getInitialBaseOctaveOffset() const {
+    return fPreset.baseOctaveOffset;
 }
 
-void FlexibleMapper::setOctaveOffset(int offset) {
-    fOctaveOffset = static_cast<int8_t>(std::clamp(offset, -4, 4));
-}
-
-int8_t FlexibleMapper::getTriggerOctaveOffset() const {
-    return fTriggerOctaveOffset;
-}
-
-void FlexibleMapper::setTriggerOctaveOffset(int8_t offset) {
-    fTriggerOctaveOffset = std::clamp(offset, int8_t(-4), int8_t(4));
-}
-
-uint8_t FlexibleMapper::applyMelodyOctave(uint8_t baseNote, int8_t triggerOctave) const {
-    int total = baseNote + (fOctaveOffset * 12) + (triggerOctave * 12);
+uint8_t FlexibleMapper::applyMelodyOctave(uint8_t baseNote, MapperOctaveState octave) const {
+    int total = baseNote + (octave.base * 12) + (octave.trigger * 12);
     return clampNote(total);
 }
 
-uint8_t FlexibleMapper::applyChordOctave(int baseNote, int8_t chordOctaveOffset) const {
+uint8_t FlexibleMapper::applyChordOctave(int baseNote, int8_t chordOctaveOffset, MapperOctaveState octave) const {
     // Chords ignore trigger octave, only use base + chord-specific offset
-    int total = baseNote + (fOctaveOffset * 12) + (chordOctaveOffset * 12);
+    int total = baseNote + (octave.base * 12) + (chordOctaveOffset * 12);
     return clampNote(total);
 }
 
@@ -139,7 +129,7 @@ uint8_t FlexibleMapper::getShiftButtonForButton(uint8_t button) const {
 
 bool FlexibleMapper::flushActiveNotes(IMidiOutputSink& out) {
     bool allQueued = true;
-    for (auto& notes : fActiveNotes) {
+    for (auto& notes : fState.activeNotes) {
         uint8_t remainingCount = 0;
         for (size_t i = 0; i < notes.count; ++i) {
             RawMidi midi{};
@@ -158,10 +148,10 @@ bool FlexibleMapper::flushActiveNotes(IMidiOutputSink& out) {
     return allQueued;
 }
 
-void FlexibleMapper::handleNoteMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, IMidiOutputSink& out) {
+void FlexibleMapper::handleNoteMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, MapperOctaveState octave, IMidiOutputSink& out) {
     if (pressed) {
         // Calculate note and store it for later Note Off
-        uint8_t note = applyMelodyOctave(config.noteOrCC, fTriggerOctaveOffset);
+        uint8_t note = applyMelodyOctave(config.noteOrCC, octave);
 
         RawMidi midi{};
         midi.data[0] = 0x90 | (fPreset.channel & 0x0F);  // Note On
@@ -169,32 +159,32 @@ void FlexibleMapper::handleNoteMode(const MapperConfig::ButtonConfig& config, bo
         midi.data[2] = config.velocity;
         midi.size = 3;
         if (out.pushMidi(midi)) {
-            fActiveNotes[button].count = 1;
-            fActiveNotes[button].notes[0] = note;
+            fState.activeNotes[button].count = 1;
+            fState.activeNotes[button].notes[0] = note;
         }
     }
     else {
         // Send Note Off for the stored note, not recalculated one
-        if (fActiveNotes[button].count > 0) {
+        if (fState.activeNotes[button].count > 0) {
             RawMidi midi{};
             midi.data[0] = 0x80 | (fPreset.channel & 0x0F);  // Note Off
-            midi.data[1] = fActiveNotes[button].notes[0];
+            midi.data[1] = fState.activeNotes[button].notes[0];
             midi.data[2] = 0;
             midi.size = 3;
             if (out.pushMidi(midi)) {
-                fActiveNotes[button].count = 0;
+                fState.activeNotes[button].count = 0;
             }
         }
     }
 }
 
-void FlexibleMapper::handleChordMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, IMidiOutputSink& out) {
+void FlexibleMapper::handleChordMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, MapperOctaveState octave, IMidiOutputSink& out) {
     if (pressed) {
         // Calculate and store all chord notes
-        fActiveNotes[button].count = 0;
+        fState.activeNotes[button].count = 0;
         for (size_t i = 0; i < config.intervalCount && i < MapperConfig::MAX_ACTIVE_NOTES; ++i) {
             int baseNote = static_cast<int>(config.noteOrCC) + static_cast<int>(config.chordIntervals[i]);
-            uint8_t clampedNote = applyChordOctave(baseNote, config.chordOctaveOffset);
+            uint8_t clampedNote = applyChordOctave(baseNote, config.chordOctaveOffset, octave);
 
             RawMidi midi{};
             midi.data[0] = 0x90 | (fPreset.channel & 0x0F);  // Note On
@@ -202,24 +192,24 @@ void FlexibleMapper::handleChordMode(const MapperConfig::ButtonConfig& config, b
             midi.data[2] = config.velocity;
             midi.size = 3;
             if (out.pushMidi(midi)) {
-                fActiveNotes[button].notes[fActiveNotes[button].count++] = clampedNote;
+                fState.activeNotes[button].notes[fState.activeNotes[button].count++] = clampedNote;
             }
         }
     }
     else {
         // Send Note Off for all active notes
         uint8_t remainingCount = 0;
-        for (size_t i = 0; i < fActiveNotes[button].count; ++i) {
+        for (size_t i = 0; i < fState.activeNotes[button].count; ++i) {
             RawMidi midi{};
             midi.data[0] = 0x80 | (fPreset.channel & 0x0F);  // Note Off
-            midi.data[1] = fActiveNotes[button].notes[i];
+            midi.data[1] = fState.activeNotes[button].notes[i];
             midi.data[2] = 0;
             midi.size = 3;
             if (!out.pushMidi(midi)) {
-                fActiveNotes[button].notes[remainingCount++] = fActiveNotes[button].notes[i];
+                fState.activeNotes[button].notes[remainingCount++] = fState.activeNotes[button].notes[i];
             }
         }
-        fActiveNotes[button].count = remainingCount;
+        fState.activeNotes[button].count = remainingCount;
     }
 }
 
@@ -237,7 +227,7 @@ void FlexibleMapper::handleCCToggle(const MapperConfig::ButtonConfig& config, bo
         return;  // Only toggle on press
     }
 
-    bool& state = fCCToggleStates[config.noteOrCC];
+    bool& state = fState.ccToggleStates[config.noteOrCC];
     state = !state;
 
     RawMidi midi{};
@@ -253,10 +243,10 @@ void FlexibleMapper::handleAxisCC(const MapperConfig::AxisConfig& config, int16_
     uint8_t ccValue = static_cast<uint8_t>(normalized * 127.0f);
 
     // Only send if value changed
-    if (ccValue == fLastAxisCCValues[axis]) {
+    if (ccValue == fState.lastAxisCCValues[axis]) {
         return;
     }
-    fLastAxisCCValues[axis] = ccValue;
+    fState.lastAxisCCValues[axis] = ccValue;
 
     RawMidi midi{};
     midi.data[0] = 0xB0 | (fPreset.channel & 0x0F);
@@ -271,10 +261,10 @@ void FlexibleMapper::handleAxisPitchBend(const MapperConfig::AxisConfig& config,
     uint16_t bendValue = static_cast<uint16_t>(normalized * 16383.0f);
 
     // Only send if value changed
-    if (bendValue == fLastAxisPitchBendValues[axis]) {
+    if (bendValue == fState.lastAxisPitchBendValues[axis]) {
         return;
     }
-    fLastAxisPitchBendValues[axis] = bendValue;
+    fState.lastAxisPitchBendValues[axis] = bendValue;
 
     RawMidi midi{};
     midi.data[0] = 0xE0 | (fPreset.channel & 0x0F);  // Pitch Bend

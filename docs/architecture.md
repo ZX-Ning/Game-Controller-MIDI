@@ -38,10 +38,10 @@ Detailed documentation of core components, threading model, and state management
 | Thread | Responsibility | Real-time Safe? |
 |--------|----------------|-----------------|
 | **Audio Thread** | `Plugin::run()` — pops from MIDI queue, writes to host | Yes (must be) |
-| **SDL Thread** | `SdlManager` — polls controller, pushes to queue | No (background) |
+| **SDL Thread** | `SdlManager` — polls controller and dispatches events to mapper/dispatcher | No (background) |
 | **UI Thread** | `GameControllerMIDIUI` — renders ImGui | No |
 
-**Critical**: The audio thread must never block. All cross-thread communication uses `boost::lockfree::queue`.
+**Critical**: The audio thread must never block. MIDI events cross into the audio thread through `boost::lockfree::queue`; small UI/host-visible control values use atomics in dispatcher-owned shared state.
 
 ---
 
@@ -76,23 +76,40 @@ Implements `IControllerEventHandler`. Central hub connecting hardware to MIDI ou
 - Maintains button states array for UI feedback
 - Owns and delegates to the active `IMidiMapper`
 - Manages `boost::lockfree::queue<RawMidi>` (SDL thread → audio thread)
+- Owns `SharedState`, the single source of truth for base and trigger octave offsets
 - **Trigger octave control**: LT/RT edge detection for octave shifting
 
 **Trigger Octave Logic**:
 ```cpp
 constexpr float TRIGGER_THRESHOLD = 0.5f;
 
-// LT (axis 4): increment octave when crossing threshold upward
-// RT (axis 5): decrement octave when crossing threshold upward
+// LT (axis 4): decrement trigger octave when crossing threshold upward
+// RT (axis 5): increment trigger octave when crossing threshold upward
 // Range: -4 to +4 (clamped)
 ```
 
 **Key Methods**:
 - `popMidi(RawMidi&)` — called by audio thread
 - `setMapper(std::unique_ptr<IMidiMapper>)` — install mapper
-- `getMapper()` — access current mapper
 - `isConnected()`, `getControllerName()` — UI queries
-- `getButtonStates()` — UI feedback array
+- `getButtonState()` — UI feedback
+- `sharedState()` — UI/host-visible shared mapper control state
+
+---
+
+### SharedState (Octave State)
+
+**File**: `src/Common/SharedState.hpp`
+
+Dispatcher-owned shared state for live octave offsets.
+
+**Responsibilities**:
+- Owns current base octave and trigger octave as atomics
+- Clamps octave values to `-4..+4`
+- Provides octave snapshots for mapper note/chord calculations
+- Tracks whether mapper/controller changed base octave and the host parameter needs synchronization
+
+`FlexibleMapper` receives a `SharedState&` during button mapping, so mapper modes such as `OctaveUp` and `OctaveDown` can synchronously update the single source of truth. The mapper must not store the reference.
 
 ---
 
@@ -104,12 +121,11 @@ Pure interface for MIDI translation. Implement this to create custom mapping log
 
 **Required Methods**:
 ```cpp
-virtual void onButtonEvent(int button, bool pressed, MidiCallback cb) = 0;
-virtual void onAxisEvent(int axis, float value, MidiCallback cb) = 0;
-virtual int getOctaveOffset() const = 0;
-virtual int getShiftButton() const = 0;
-virtual int getTriggerOctaveOffset() const = 0;
-virtual void setTriggerOctaveOffset(int offset) = 0;
+virtual void onButton(uint8_t button, bool pressed, bool shiftState,
+                      SharedState& state, IMidiOutputSink& out) = 0;
+virtual void onAxis(uint8_t axis, int16_t value, bool shiftState,
+                    const SharedState& state, IMidiOutputSink& out) = 0;
+virtual bool flushActiveNotes(IMidiOutputSink& out) = 0;
 ```
 
 ---
@@ -128,10 +144,11 @@ Configurable mapper loaded from JSON presets.
 - Axis value caching to reduce redundant MIDI traffic
 
 **Octave Handling**:
-- `baseOctaveOffset` — set in preset JSON
-- `octaveOffset_` — runtime adjustment via OctaveUp/OctaveDown buttons
-- `triggerOctaveOffset_` — cumulative LT/RT offset (melody notes only)
+- `baseOctaveOffset` — preset's initial base octave, copied into `SharedState` when the mapper is installed
+- Runtime base octave — owned by `SharedState`; `OctaveUp/OctaveDown` modes update it synchronously
+- Trigger octave — owned by `SharedState`; LT/RT edges update it in `EventDispatcher`
 - `chordOctaveOffset` — per-chord offset (does NOT include trigger octave)
+- Active notes store the exact pitches that were sent, so Note Off still matches after octave changes
 
 **Key Methods**:
 - `loadPreset(const char* json)` — parse embedded JSON
@@ -165,7 +182,7 @@ The plugin uses DPF's state system for persistence:
 
 **State Flow**:
 ```
-UI setState() → Plugin::setState() → reloadMapper() / update atomic
+UI setState() → Plugin::setState() → reloadMapper() / update SharedState
                                    ↓
 Host saves state                   UI reads via getPluginInstancePointer()
                                    ↓
@@ -208,9 +225,9 @@ ImGui-based user interface with dual-mode design.
 ```
 1. SDL Thread: SDL_PollEvent() detects button press
 2. SDL Thread: SdlManager calls handler->onButtonDown(button)
-3. SDL Thread: EventDispatcher calls mapper->onButtonEvent(button, true, callback)
-4. SDL Thread: FlexibleMapper generates Note On, calls callback(RawMidi)
-5. SDL Thread: EventDispatcher pushes to lockfree queue
+3. SDL Thread: EventDispatcher calls mapper->onButton(..., SharedState&, fMidiEvents)
+4. SDL Thread: FlexibleMapper reads an octave snapshot and queues RawMidi
+5. SDL Thread: MidiEventQueue stores RawMidi in lock-free queues
 6. Audio Thread: Plugin::run() pops from queue
 7. Audio Thread: Plugin writes MidiEvent to host output
 ```
@@ -220,9 +237,9 @@ ImGui-based user interface with dual-mode design.
 ```
 1. SDL Thread: Axis event for LT (axis 4) or RT (axis 5)
 2. SDL Thread: EventDispatcher detects threshold crossing (0.5)
-3. SDL Thread: Calls mapper->setTriggerOctaveOffset(newValue)
-4. SDL Thread: Calls plugin setState("triggerOctave", value)
-5. Future notes use updated offset (melody only, not chords)
+3. SDL Thread: Updates dispatcher-owned `SharedState`
+4. UI/state reads the new trigger octave through EventDispatcher
+5. Future melody notes use updated offset; chord notes ignore trigger octave
 ```
 
 ---

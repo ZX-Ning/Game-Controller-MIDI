@@ -68,7 +68,8 @@ struct AxisConfig {
 
 /**
  * Complete serializable mapper preset. UI/host code edits and serializes this
- * outside the audio thread; `FlexibleMapper` copies it into mapper-owned state.
+ * outside the audio thread; `FlexibleMapper` copies mapping config while
+ * dispatcher-owned shared state holds live octave offsets.
  */
 struct MapperPreset {
     std::array<char, 64> name{};  // Preset name (null-terminated)

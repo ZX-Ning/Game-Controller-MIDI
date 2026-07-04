@@ -1,16 +1,9 @@
 #include "EventDispatcher.hpp"
 
-#include <algorithm>
-
 namespace GCMidi {
 
 EventDispatcher::EventDispatcher()
-    : fControllerConnected(false),
-      fTriggerOctaveOffset(0),
-      fBaseOctaveOffset(0),
-      fRequestedBaseOctaveOffset(0),
-      fBaseOctaveRequestPending(false),
-      fBaseOctaveDirty(false) {
+    : fControllerConnected(false) {
     for (int i = 0; i < SDL_CONTROLLER_BUTTON_MAX; ++i) {
         fButtonStates[i].store(false, std::memory_order_relaxed);
     }
@@ -38,7 +31,6 @@ void EventDispatcher::onControllerDisconnected() {
         for (int i = 0; i < SDL_CONTROLLER_BUTTON_MAX; ++i) {
             fButtonStates[i].store(false, std::memory_order_relaxed);
         }
-        fTriggerOctaveOffset.store(0, std::memory_order_relaxed);
         fLeftTriggerPressed = false;
         fRightTriggerPressed = false;
     }
@@ -46,8 +38,8 @@ void EventDispatcher::onControllerDisconnected() {
     std::lock_guard<std::mutex> mapperLock(fMapperMutex);
     if (fMapper) {
         fMapper->flushActiveNotes(fMidiEvents);
-        fMapper->setTriggerOctaveOffset(0);
     }
+    fSharedState.resetTriggerOctave();
 }
 
 void EventDispatcher::onControllerButton(uint8_t button, bool pressed, bool shiftState) {
@@ -57,15 +49,7 @@ void EventDispatcher::onControllerButton(uint8_t button, bool pressed, bool shif
 
     std::lock_guard<std::mutex> lock(fMapperMutex);
     if (fMapper) {
-        applyPendingBaseOctaveOffsetLocked();
-        int oldOctave = fMapper->getOctaveOffset();
-        fMapper->onButton(button, pressed, shiftState, fMidiEvents);
-        int newOctave = fMapper->getOctaveOffset();
-        if (oldOctave != newOctave) {
-            fBaseOctaveOffset.store(static_cast<int8_t>(newOctave), std::memory_order_relaxed);
-            fRequestedBaseOctaveOffset.store(static_cast<int8_t>(newOctave), std::memory_order_relaxed);
-            fBaseOctaveDirty.store(true, std::memory_order_relaxed);
-        }
+        fMapper->onButton(button, pressed, shiftState, fSharedState, fMidiEvents);
     }
 }
 
@@ -75,13 +59,7 @@ void EventDispatcher::onControllerAxis(uint8_t axis, int16_t value, bool shiftSt
         bool pressed = (value > TRIGGER_THRESHOLD);
         if (pressed && !fLeftTriggerPressed) {
             // LT just pressed: decrement octave
-            int8_t current = fTriggerOctaveOffset.load(std::memory_order_relaxed);
-            int8_t next = static_cast<int8_t>(std::max(-4, current - 1));
-            fTriggerOctaveOffset.store(next, std::memory_order_relaxed);
-            std::lock_guard<std::mutex> lock(fMapperMutex);
-            if (fMapper) {
-                fMapper->setTriggerOctaveOffset(next);
-            }
+            fSharedState.adjustTriggerOctave(-1);
         }
         fLeftTriggerPressed = pressed;
         return;  // Don't forward to mapper
@@ -91,13 +69,7 @@ void EventDispatcher::onControllerAxis(uint8_t axis, int16_t value, bool shiftSt
         bool pressed = (value > TRIGGER_THRESHOLD);
         if (pressed && !fRightTriggerPressed) {
             // RT just pressed: increment octave
-            int8_t current = fTriggerOctaveOffset.load(std::memory_order_relaxed);
-            int8_t next = static_cast<int8_t>(std::min(4, current + 1));
-            fTriggerOctaveOffset.store(next, std::memory_order_relaxed);
-            std::lock_guard<std::mutex> lock(fMapperMutex);
-            if (fMapper) {
-                fMapper->setTriggerOctaveOffset(next);
-            }
+            fSharedState.adjustTriggerOctave(1);
         }
         fRightTriggerPressed = pressed;
         return;
@@ -105,8 +77,7 @@ void EventDispatcher::onControllerAxis(uint8_t axis, int16_t value, bool shiftSt
 
     std::lock_guard<std::mutex> lock(fMapperMutex);
     if (fMapper) {
-        applyPendingBaseOctaveOffsetLocked();
-        fMapper->onAxis(axis, value, shiftState, fMidiEvents);
+        fMapper->onAxis(axis, value, shiftState, fSharedState, fMidiEvents);
     }
 }
 
@@ -151,45 +122,18 @@ void EventDispatcher::setMapper(std::unique_ptr<IMidiMapper> mapper) {
             return;
         }
     }
-    const int oldBaseOctave = fBaseOctaveOffset.load(std::memory_order_relaxed);
     fMapper = std::move(mapper);
     if (fMapper) {
-        fMapper->setTriggerOctaveOffset(fTriggerOctaveOffset.load(std::memory_order_relaxed));
-        const int newBaseOctave = fMapper->getOctaveOffset();
-        fBaseOctaveOffset.store(static_cast<int8_t>(newBaseOctave), std::memory_order_relaxed);
-        fRequestedBaseOctaveOffset.store(static_cast<int8_t>(newBaseOctave), std::memory_order_relaxed);
-        if (oldBaseOctave != newBaseOctave) {
-            fBaseOctaveDirty.store(true, std::memory_order_relaxed);
-        }
+        fSharedState.setBaseOctaveFromPreset(fMapper->getInitialBaseOctaveOffset());
     }
 }
 
-bool EventDispatcher::getAndResetBaseOctaveDirty() {
-    return fBaseOctaveDirty.exchange(false);
+SharedState& EventDispatcher::sharedState() {
+    return fSharedState;
 }
 
-int EventDispatcher::getBaseOctaveOffset() const {
-    return fBaseOctaveOffset.load(std::memory_order_relaxed);
-}
-
-void EventDispatcher::requestBaseOctaveOffset(int offset) {
-    const int8_t clamped = static_cast<int8_t>(std::clamp(offset, -4, 4));
-    fBaseOctaveOffset.store(clamped, std::memory_order_relaxed);
-    fRequestedBaseOctaveOffset.store(clamped, std::memory_order_relaxed);
-    fBaseOctaveRequestPending.store(true, std::memory_order_release);
-}
-
-int8_t EventDispatcher::getTriggerOctaveOffset() const {
-    return fTriggerOctaveOffset.load(std::memory_order_relaxed);
-}
-
-void EventDispatcher::setTriggerOctaveOffset(int8_t offset) {
-    const int8_t clamped = std::clamp(offset, int8_t(-4), int8_t(4));
-    fTriggerOctaveOffset.store(clamped, std::memory_order_relaxed);
-    std::lock_guard<std::mutex> lock(fMapperMutex);
-    if (fMapper) {
-        fMapper->setTriggerOctaveOffset(clamped);
-    }
+const SharedState& EventDispatcher::sharedState() const {
+    return fSharedState;
 }
 
 void EventDispatcher::deactivate() {
@@ -203,17 +147,6 @@ uint64_t EventDispatcher::getDroppedMidiEventCount() const {
 
 uint64_t EventDispatcher::getDroppedNoteOffCount() const {
     return fMidiEvents.getDroppedNoteOffCount();
-}
-
-void EventDispatcher::applyPendingBaseOctaveOffsetLocked() {
-    if (!fBaseOctaveRequestPending.exchange(false, std::memory_order_acquire)) {
-        return;
-    }
-
-    const int8_t requested = fRequestedBaseOctaveOffset.load(std::memory_order_relaxed);
-    if (fMapper) {
-        fMapper->setOctaveOffset(requested);
-    }
 }
 
 void EventDispatcher::clearMapperRuntimeStateLocked() {

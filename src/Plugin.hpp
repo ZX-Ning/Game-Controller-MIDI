@@ -78,7 +78,7 @@ protected:
     /** Return current parameter value from atomics/dispatcher state. */
     float getParameterValue(uint32_t index) const override;
 
-    /** Apply parameter changes; octave updates are deferred through dispatcher atomics. */
+    /** Apply parameter changes to dispatcher-owned atomic state. */
     void setParameterValue(uint32_t index, float value) override;
 
     /* ------------------------------------------------------------------

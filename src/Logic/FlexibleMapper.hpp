@@ -10,6 +10,30 @@
 
 namespace GCMidi {
 
+/** Runtime-only mapper state, serialized by EventDispatcher's mapper mutex. */
+struct MapperRuntimeState {
+    /** Notes currently held by one button. */
+    struct ActiveNotes {
+        uint8_t count = 0;
+        std::array<uint8_t, MapperConfig::MAX_ACTIVE_NOTES> notes{};
+    };
+
+    /** Per-button active notes, serialized by the owner. */
+    std::array<ActiveNotes, SDL_CONTROLLER_BUTTON_MAX> activeNotes{};
+
+    /** Last toggle state for each MIDI CC number. */
+    std::array<bool, 128> ccToggleStates{};
+
+    /** Last sent 7-bit CC value per axis, used to suppress duplicates. */
+    std::array<uint8_t, SDL_CONTROLLER_AXIS_MAX> lastAxisCCValues{};
+
+    /** Last sent 14-bit pitch-bend value per axis. */
+    std::array<uint16_t, SDL_CONTROLLER_AXIS_MAX> lastAxisPitchBendValues{};
+
+    /** Reset runtime state when a new preset becomes active. */
+    void reset();
+};
+
 /**
  * JSON-configurable mapper from SDL button/axis events to MIDI.
  *
@@ -40,31 +64,22 @@ public:
     void setPreset(const MapperConfig::MapperPreset& preset);
 
     /** Map a button edge to note, chord, or CC MIDI. Serialized by owner. */
-    void onButton(uint8_t button, bool pressed, bool shift, IMidiOutputSink& out) override;
+    void onButton(uint8_t button, bool pressed, bool shift, SharedState& state, IMidiOutputSink& out) override;
 
     /** Map axis movement to CC or pitch bend MIDI. */
-    void onAxis(uint8_t axis, int16_t value, bool shift, IMidiOutputSink& out) override;
+    void onAxis(uint8_t axis, int16_t value, bool shift, const SharedState& state, IMidiOutputSink& out) override;
 
     /** Emit Note Off for tracked notes; failed sends remain tracked. */
     bool flushActiveNotes(IMidiOutputSink& out) override;
 
-    /** Return the base octave offset. */
-    int getOctaveOffset() const override;
-
-    /** Set base octave offset, clamped to -4..+4. */
-    void setOctaveOffset(int offset) override;
-
-    /** Return transient LT/RT melody transposition offset. */
-    int8_t getTriggerOctaveOffset() const override;
-
-    /** Set transient LT/RT melody transposition offset, clamped to -4..+4. */
-    void setTriggerOctaveOffset(int8_t offset) override;
+    /** Return the preset's initial base octave offset. */
+    int8_t getInitialBaseOctaveOffset() const override;
 
     /** Apply base + trigger octave to a melody note and clamp to MIDI range. */
-    uint8_t applyMelodyOctave(uint8_t baseNote, int8_t triggerOctave) const;
+    uint8_t applyMelodyOctave(uint8_t baseNote, MapperOctaveState octave) const;
 
     /** Apply base + chord octave to a chord note and clamp to MIDI range. */
-    uint8_t applyChordOctave(int baseNote, int8_t chordOctaveOffset) const;
+    uint8_t applyChordOctave(int baseNote, int8_t chordOctaveOffset, MapperOctaveState octave) const;
 
     /** Return the preset's global shift button. */
     uint8_t getShiftButton() const override;
@@ -76,38 +91,14 @@ private:
     /** Active preset; all access is serialized by `EventDispatcher::fMapperMutex`. */
     MapperConfig::MapperPreset fPreset{};
 
-    /** Base octave offset for melody and chord notes. */
-    int8_t fOctaveOffset = 0;
-
-    /** Transient LT/RT offset for melody notes; chord mode ignores it. */
-    int8_t fTriggerOctaveOffset = 0;  // Cumulative LT/RT offset
-
-    /**
-     * Notes currently held by one button. Stores the exact sent pitches so
-     * release events still match after octave changes.
-     */
-    struct ActiveNotes {
-        uint8_t count = 0;
-        std::array<uint8_t, MapperConfig::MAX_ACTIVE_NOTES> notes{};
-    };
-
-    /** Per-button active notes, serialized by the owner. */
-    std::array<ActiveNotes, SDL_CONTROLLER_BUTTON_MAX> fActiveNotes{};
-
-    /** Last toggle state for each MIDI CC number. */
-    std::array<bool, 128> fCCToggleStates{};
-
-    /** Last sent 7-bit CC value per axis, used to suppress duplicates. */
-    std::array<uint8_t, SDL_CONTROLLER_AXIS_MAX> fLastAxisCCValues{};
-
-    /** Last sent 14-bit pitch-bend value per axis. */
-    std::array<uint16_t, SDL_CONTROLLER_AXIS_MAX> fLastAxisPitchBendValues{};
+    /** Runtime state reset from the preset and changed while playing. */
+    MapperRuntimeState fState{};
 
     /** Emit Note On/Off for single-note button mode. */
-    void handleNoteMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, IMidiOutputSink& out);
+    void handleNoteMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, MapperOctaveState octave, IMidiOutputSink& out);
 
     /** Emit Note On/Off messages for chord button mode. */
-    void handleChordMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, IMidiOutputSink& out);
+    void handleChordMode(const MapperConfig::ButtonConfig& config, bool pressed, uint8_t button, MapperOctaveState octave, IMidiOutputSink& out);
 
     /** Emit 127 on press and 0 on release for momentary CC mode. */
     void handleCCMomentary(const MapperConfig::ButtonConfig& config, bool pressed, IMidiOutputSink& out);

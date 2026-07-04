@@ -83,20 +83,19 @@ Create `src/Logic/MyMapper.hpp`:
 class MyMapper : public IMidiMapper {
 public:
     MyMapper();
-    
-    void onButtonEvent(int button, bool pressed, MidiCallback callback) override;
-    void onAxisEvent(int axis, float value, MidiCallback callback) override;
-    
-    int getOctaveOffset() const override { return octaveOffset_; }
+
+    void onButton(uint8_t button, bool pressed, bool shiftState,
+                  SharedState& state, IMidiOutputSink& out) override;
+    void onAxis(uint8_t axis, int16_t value, bool shiftState,
+                const SharedState& state, IMidiOutputSink& out) override;
+
+    bool flushActiveNotes(IMidiOutputSink& out) override;
+    int8_t getInitialBaseOctaveOffset() const override { return 0; }
     int getShiftButton() const override { return 10; } // rightshoulder
-    
-    int getTriggerOctaveOffset() const override { return triggerOctaveOffset_; }
-    void setTriggerOctaveOffset(int offset) override { triggerOctaveOffset_ = offset; }
 
 private:
-    int octaveOffset_ = 0;
-    int triggerOctaveOffset_ = 0;
-    std::array<bool, 16> buttonStates_{};
+    std::array<uint8_t, 16> activeNotes_{};
+    std::array<bool, 16> hasActiveNote_{};
 };
 ```
 
@@ -110,35 +109,64 @@ Create `src/Logic/MyMapper.cpp`:
 
 MyMapper::MyMapper() = default;
 
-void MyMapper::onButtonEvent(int button, bool pressed, MidiCallback callback) {
-    buttonStates_[button] = pressed;
-    
+void MyMapper::onButton(uint8_t button, bool pressed, bool, SharedState& state, IMidiOutputSink& out) {
     // Example: Button 0 (A) plays C4
     if (button == 0) {
+        const auto octave = state.octaveSnapshot();
+        const uint8_t note = static_cast<uint8_t>(60 + octave.base * 12 + octave.trigger * 12);
+
         RawMidi midi;
         midi.data[0] = pressed ? 0x90 : 0x80; // Note On/Off, channel 0
-        midi.data[1] = 60 + (octaveOffset_ * 12) + (triggerOctaveOffset_ * 12);
+        midi.data[1] = pressed ? note : activeNotes_[button];
         midi.data[2] = pressed ? 100 : 0;
         midi.size = 3;
-        callback(midi);
+        if (out.pushMidi(midi) && pressed) {
+            activeNotes_[button] = note;
+            hasActiveNote_[button] = true;
+        }
+        if (!pressed) {
+            hasActiveNote_[button] = false;
+        }
     }
-    
+
     // Example: Button 11 (dpad_up) = octave up
     if (button == 11 && pressed) {
-        octaveOffset_++;
+        state.adjustBaseOctaveFromMapper(1);
     }
 }
 
-void MyMapper::onAxisEvent(int axis, float value, MidiCallback callback) {
+void MyMapper::onAxis(uint8_t axis, int16_t value, bool, const SharedState&, IMidiOutputSink& out) {
     // Example: Left stick X = CC 1
     if (axis == 0) {
         RawMidi midi;
         midi.data[0] = 0xB0; // CC, channel 0
         midi.data[1] = 1;    // CC number
-        midi.data[2] = static_cast<uint8_t>((value + 1.0f) * 63.5f); // -1..1 to 0..127
+        midi.data[2] = static_cast<uint8_t>((static_cast<int>(value) + 32768) / 516); // approx 0..127
         midi.size = 3;
-        callback(midi);
+        out.pushMidi(midi);
     }
+}
+
+bool MyMapper::flushActiveNotes(IMidiOutputSink& out) {
+    bool allQueued = true;
+    for (size_t button = 0; button < activeNotes_.size(); ++button) {
+        if (!hasActiveNote_[button]) {
+            continue;
+        }
+
+        RawMidi midi{};
+        midi.data[0] = 0x80;
+        midi.data[1] = activeNotes_[button];
+        midi.data[2] = 0;
+        midi.size = 3;
+        if (out.pushMidi(midi)) {
+            hasActiveNote_[button] = false;
+        }
+        else {
+            allQueued = false;
+        }
+    }
+    return allQueued;
 }
 ```
 
@@ -169,7 +197,8 @@ Your mapper MUST be real-time safe:
 - [ ] No blocking calls (mutex, file I/O, network)
 - [ ] Use `std::array` instead of `std::vector`
 - [ ] Pre-allocate everything in constructor
-- [ ] Callback may be called from SDL thread — keep it fast
+- [ ] Mapper callbacks may be called from SDL thread — keep them fast
+- [ ] Do not store `SharedState&`; use it only during the current mapper callback
 
 ---
 
@@ -306,7 +335,7 @@ case ButtonMode::MyNewMode: return "my_new_mode";
 
 ### Step 3: Implement in FlexibleMapper
 
-Edit `src/Logic/FlexibleMapper.cpp` in `onButtonEvent()`:
+Edit `src/Logic/FlexibleMapper.cpp` in `onButton()`:
 
 ```cpp
 case ButtonMode::MyNewMode:
@@ -314,7 +343,7 @@ case ButtonMode::MyNewMode:
         // Your custom logic here
         RawMidi midi;
         // ... fill midi ...
-        callback(midi);
+        out.pushMidi(midi);
     }
     break;
 ```
